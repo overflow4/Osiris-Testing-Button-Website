@@ -86,6 +86,20 @@
     }
     .modal input:focus { border-color:var(--accent); }
     .modal input::placeholder { color:var(--text-muted); }
+    .modal select {
+      width:100%; padding:0.55rem 0.8rem; background:var(--surface-2);
+      border:1px solid var(--border); border-radius:8px; color:var(--text);
+      font-size:0.85rem; font-family:inherit; outline:none; transition:border-color 0.15s;
+      cursor:pointer;
+    }
+    .modal select:focus { border-color:var(--accent); }
+    .modal select option { background:var(--surface-2); color:var(--text); }
+    .biz-type-badge {
+      font-size:0.55rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+      padding:0.1rem 0.35rem; border-radius:4px; margin-left:0.3rem;
+    }
+    .biz-type-wc { background:#8b5cf620; color:#a78bfa; }
+    .biz-type-hc { background:#06b6d420; color:#22d3ee; }
     .modal-btns { display:flex; gap:0.6rem; margin-top:1.25rem; justify-content:flex-end; }
 
     /* Buttons */
@@ -280,6 +294,7 @@
   <div class="modal">
     <h2>Add Business</h2>
     <label><span class="lbl">Business Name *</span><input type="text" id="inBizName" placeholder="e.g. WinBros Window Cleaning"></label>
+    <label><span class="lbl">Business Type *</span><select id="inBizType"><option value="window_cleaning">Window Cleaning (WinBros-style)</option><option value="house_cleaning">Cleaning Company (Spotless-style)</option></select></label>
     <label><span class="lbl">VAPI Phone Number (for voice calls)</span><input type="text" id="inVapi" placeholder="+15103705908"></label>
     <label><span class="lbl">SMS Phone Number (for text messaging)</span><input type="text" id="inSms" placeholder="+17479663565"></label>
     <label><span class="lbl">Website URL (for form submissions)</span><input type="text" id="inWeb" placeholder="https://example.com/contact"></label>
@@ -408,9 +423,12 @@
     businesses.forEach((b, i) => {
       const chip = document.createElement('div');
       chip.className = 'biz-chip' + (b.checked ? ' checked' : '');
+      const bt = b.type || 'window_cleaning';
+      const btLabel = bt === 'house_cleaning' ? 'HC' : 'WC';
+      const btCls = bt === 'house_cleaning' ? 'biz-type-hc' : 'biz-type-wc';
       chip.innerHTML = `
         <input type="checkbox" ${b.checked ? 'checked' : ''} onclick="event.stopPropagation(); toggleBiz(${i})">
-        <span onclick="toggleBiz(${i})">${b.name}</span>
+        <span onclick="toggleBiz(${i})">${b.name}<span class="biz-type-badge ${btCls}">${btLabel}</span></span>
         <span class="biz-remove" onclick="event.stopPropagation();removeBiz(${i})">\u00D7</span>
       `;
       list.appendChild(chip);
@@ -443,6 +461,7 @@
   function closeModal() {
     document.getElementById('modalOverlay').classList.remove('open');
     ['inBizName','inVapi','inSms','inWeb','inEmail'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('inBizType').selectedIndex = 0;
   }
 
   function saveBiz() {
@@ -450,6 +469,7 @@
     if (!name) return;
     businesses.push({
       name,
+      type: document.getElementById('inBizType').value,
       vapi: document.getElementById('inVapi').value.trim(),
       sms: document.getElementById('inSms').value.trim(),
       web: document.getElementById('inWeb').value.trim(),
@@ -492,20 +512,32 @@
   // ── Voice Test ──
   async function testVoice(biz) {
     if (!biz.vapi) { setBadge('badgeVoice','fail','SKIPPED'); addSys('tVoice','No VAPI number configured.','sys-warn'); return 'SKIPPED'; }
+    const bizType = biz.type || 'window_cleaning';
     setBadge('badgeVoice','running','CALLING');
     addPhase('tVoice','Voice Call');
     addSys('tVoice','Dialing ' + biz.vapi + '...');
+
+    const voicePrompts = {
+      window_cleaning: {
+        system: "You are Alex Thompson, a homeowner calling to get a quote on window cleaning. You want EXTERIOR ONLY windows cleaned. About 2500 square feet. No French panes. Address: 742 Evergreen Terrace, Naperville, IL 60540. Preferred time: Saturday at 10am. Found via Google search. Phone: 424-677-1112, texting fine. Be natural, keep answers short. Accept whatever time they offer closest to Saturday morning. When they confirm and say goodbye, say 'Sounds great, thanks!' and nothing else.",
+        firstMessage: "Hi! I'm calling about getting my windows cleaned - do you guys do free estimates?"
+      },
+      house_cleaning: {
+        system: "You are Alex Thompson, a homeowner calling about house cleaning services. You want a STANDARD CLEANING. Your home is 3 bedrooms, 2 bathrooms. Address: 742 Evergreen Terrace, Naperville, IL 60540. You do NOT need a deep clean or move-in/move-out clean. Phone: 424-677-1112, texting is fine.\n\nIMPORTANT RULES:\n- When the bot asks about bedrooms and bathrooms, say \"3 bedrooms and 2 bathrooms\"\n- If asked about service type, say \"just a standard cleaning\"\n- If asked your name, say \"Alex Thompson\"\n- If asked about frequency, say \"just a one-time cleaning for now\"\n- If the bot says they'll text you a quote or pricing, say \"Sounds good!\"\n- Keep answers SHORT — 1-2 sentences max\n- Be natural and conversational, like a real person\n- When they say goodbye or the conversation wraps up, say \"Thanks so much!\" and nothing else\n- Do NOT ask about price — wait for them to bring it up or text it",
+        firstMessage: "Hi! I'm looking to get my house cleaned — do you guys do that?"
+      }
+    };
+    const vp = voicePrompts[bizType];
+
     try {
       const res = await fetch(`${VAPI_BASE}/call`, {
         method:'POST', headers:{'Authorization':`Bearer ${VAPI_KEY}`,'Content-Type':'application/json'},
         body: JSON.stringify({
           phoneNumberId: FROM_VAPI_ID, customer: { number: biz.vapi },
           assistant: {
-            model: { model:'gpt-4o-mini', provider:'openai', messages:[{role:'system',
-              content:"You are Alex Thompson, a homeowner calling to get a quote on window cleaning. You want EXTERIOR ONLY windows cleaned. About 2500 square feet. No French panes. Address: 742 Evergreen Terrace, Naperville, IL 60540. Preferred time: Saturday at 10am. Found via Google search. Phone: 424-677-1112, texting fine. Be natural, keep answers short. When they confirm and say goodbye, say 'Sounds great, thanks!' and nothing else."
-            }]},
+            model: { model:'gpt-4o-mini', provider:'openai', messages:[{role:'system', content: vp.system}]},
             voice:{model:'eleven_turbo_v2_5',voiceId:'pNInz6obpgDQGcFmaJgB',provider:'11labs'},
-            firstMessage:"Hi! I'm calling about getting my windows cleaned - do you guys do free estimates?",
+            firstMessage: vp.firstMessage,
             maxDurationSeconds:300, silenceTimeoutSeconds:30
           }
         })
@@ -533,32 +565,76 @@
       document.getElementById('mVoiceDb').textContent=dbN;
       addSys('tVoice',`Customers: ${cust.length}, Leads: ${leads.length}, Calls: ${dbCalls.length}`,dbN>0?'sys-ok':'sys-warn');
 
-      const checks=[{t:'Call lasted >30s',s:dur>30},{t:'Transcript captured',s:!!data.transcript},{t:'No price quoted',s:!/\$\d/.test(data.transcript||'')},{t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},{t:'Customer record created',s:cust.length>0},{t:'Lead created',s:leads.length>0},{t:'Call logged in DB',s:dbCalls.length>0}];
+      const tx = data.transcript || '';
+      let checks;
+      if (bizType === 'house_cleaning') {
+        checks=[
+          {t:'Call lasted >30s',s:dur>30},
+          {t:'Transcript captured',s:!!tx},
+          {t:'Bot asked about bed/bath',s:/bed|bath/i.test(tx)},
+          {t:'Quote/price mentioned or texted',s:/quote|price|\$|text/i.test(tx)},
+          {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
+          {t:'Customer record created',s:cust.length>0},
+          {t:'Lead created',s:leads.length>0},
+          {t:'Call logged in DB',s:dbCalls.length>0}
+        ];
+      } else {
+        checks=[
+          {t:'Call lasted >30s',s:dur>30},
+          {t:'Transcript captured',s:!!tx},
+          {t:'No price quoted',s:!/\$\d/.test(tx)},
+          {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
+          {t:'Customer record created',s:cust.length>0},
+          {t:'Lead created',s:leads.length>0},
+          {t:'Call logged in DB',s:dbCalls.length>0}
+        ];
+      }
       showChecks('chkVoice',checks);
       const p=checks.filter(c=>c.s).length;
-      setBadge('badgeVoice',p>=5?'pass':'fail',`${p}/${checks.length}`);
-      return p>=5?'PASS':'FAIL';
+      const threshold = Math.ceil(checks.length * 0.7);
+      setBadge('badgeVoice',p>=threshold?'pass':'fail',`${p}/${checks.length}`);
+      return p>=threshold?'PASS':'FAIL';
     } catch(e){if(e.message==='__STOPPED__')throw e;addSys('tVoice','Error: '+e.message,'sys-err');setBadge('badgeVoice','fail','ERROR');return 'FAIL';}
   }
 
   // ── SMS Test ──
   async function testSms(biz) {
     if (!biz.sms) { setBadge('badgeSms','fail','SKIPPED'); addSys('tSms','No SMS number configured.','sys-warn'); return 'SKIPPED'; }
+    const bizType = biz.type || 'window_cleaning';
     setBadge('badgeSms','running','TEXTING');
     addPhase('tSms','SMS Conversation');
-    const replies=[
-      {match:/service|type|what.*clean|how.*help/i,reply:"Window cleaning please"},
-      {match:/interior|exterior|inside|outside|both/i,reply:"Just exterior"},
-      {match:/sq.*ft|square.*f|size|how big/i,reply:"About 2500 square feet"},
-      {match:/french|pane|mullion/i,reply:"No, no French panes"},
-      {match:/name|who.*am|call you|your name/i,reply:"Alex Thompson"},
-      {match:/address|where|location|street/i,reply:"742 Evergreen Terrace, Naperville, IL 60540"},
-      {match:/when|time|date|schedule|saturday|available|prefer/i,reply:"This Saturday at 10am would be great"},
-      {match:/how.*find|hear|refer|found/i,reply:"Google search"},
-    ];
-    let msgCount=0,used=new Set(),booked=false,botResponded=false;
+
+    let replies, opener;
+    if (bizType === 'house_cleaning') {
+      opener = "Hi, I need a house cleaning";
+      replies = [
+        {match:/service|type|what.*clean|how.*help|standard|deep|move/i, reply:"Just a standard cleaning please"},
+        {match:/bed|bath|room|how many/i, reply:"3 bedrooms and 2 bathrooms"},
+        {match:/name|who.*am|call you|your name/i, reply:"Alex Thompson"},
+        {match:/address|where|location|street/i, reply:"742 Evergreen Terrace, Naperville, IL 60540"},
+        {match:/frequen|regular|weekly|bi.?week|month|one.?time|often/i, reply:"Just a one-time cleaning for now"},
+        {match:/when|time|date|schedule|prefer|available/i, reply:"This Saturday at 10am would be great"},
+        {match:/pet|animal|dog|cat/i, reply:"No pets"},
+        {match:/email/i, reply:"alex.thompson.test@gmail.com"},
+        {match:/how.*find|hear|refer|found/i, reply:"Google search"},
+        {match:/anything.*else|special.*request|note|extra/i, reply:"Nope, that's everything!"},
+      ];
+    } else {
+      opener = "Hi, I'm interested in getting my windows cleaned";
+      replies = [
+        {match:/service|type|what.*clean|how.*help/i, reply:"Window cleaning please"},
+        {match:/interior|exterior|inside|outside|both/i, reply:"Just exterior"},
+        {match:/sq.*ft|square.*f|size|how big/i, reply:"About 2500 square feet"},
+        {match:/french|pane|mullion/i, reply:"No, no French panes"},
+        {match:/name|who.*am|call you|your name/i, reply:"Alex Thompson"},
+        {match:/address|where|location|street/i, reply:"742 Evergreen Terrace, Naperville, IL 60540"},
+        {match:/when|time|date|schedule|saturday|available|prefer/i, reply:"This Saturday at 10am would be great"},
+        {match:/how.*find|hear|refer|found/i, reply:"Google search"},
+      ];
+    }
+
+    let msgCount=0, used=new Set(), booked=false, botResponded=false, quoteLinkReceived=false, bedBathAsked=false, sqftAsked=false;
     try {
-      const opener="Hi, I'm interested in getting my windows cleaned";
       await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[biz.sms],content:opener})});
       addBubble('tSms',opener,true,ts());msgCount++;
 
@@ -571,9 +647,24 @@
         noReply=0;botResponded=true;const msg=inbound[0];lastId=msg.id;
         const body=msg.text||msg.content||'';
         addBubble('tSms',body,false,new Date(msg.createdAt).toLocaleTimeString('en-US',{hour12:false}));msgCount++;
-        if(/email/i.test(body))addSys('tSms','BUG: Bot asked for email','sys-err');
-        if(/quote.*link|payment.*link|stripe|checkout/i.test(body))addSys('tSms','BUG: Quote/payment link sent','sys-err');
-        if(/confirm|booked|all set|see you|appointment.*set/i.test(body)){booked=true;addSys('tSms','Booking confirmed!','sys-ok');break;}
+
+        // Track what bot asked about
+        if(/bed|bath/i.test(body)) bedBathAsked = true;
+        if(/sq.*ft|square.*f/i.test(body)) sqftAsked = true;
+
+        // Bug / success detection based on business type
+        if (bizType === 'house_cleaning') {
+          if(/\/quote\/|cleanmachine|https?:\/\//i.test(body)){quoteLinkReceived=true;addSys('tSms','Quote link sent successfully!','sys-ok');booked=true;break;}
+          if(/sq.*ft|square.*f/i.test(body))addSys('tSms','BUG: Bot asked for square footage (cleaning uses bed/bath)','sys-err');
+          if(/email/i.test(body))addSys('tSms','Note: Bot asked for email','sys-warn');
+        } else {
+          if(/email/i.test(body))addSys('tSms','BUG: Bot asked for email','sys-err');
+          if(/quote.*link|payment.*link|stripe|checkout/i.test(body))addSys('tSms','BUG: Quote/payment link sent','sys-err');
+        }
+
+        // Check for traditional booking confirmation (window cleaning)
+        if(bizType === 'window_cleaning' && /confirm|booked|all set|see you|appointment.*set/i.test(body)){booked=true;addSys('tSms','Booking confirmed!','sys-ok');break;}
+
         let replied=false;
         for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[biz.sms],content:replies[i].reply})});addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
       }
@@ -583,11 +674,30 @@
       const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
       document.getElementById('mSmsDb').textContent=cust.length+leads.length;
       addSys('tSms',`Customers: ${cust.length}, Leads: ${leads.length}`,cust.length?'sys-ok':'sys-warn');
-      const checks=[{t:'Bot responded',s:botResponded},{t:'Booking completed',s:booked},{t:'Customer record created',s:cust.length>0},{t:'Lead created',s:leads.length>0}];
+
+      let checks;
+      if (bizType === 'house_cleaning') {
+        checks=[
+          {t:'Bot responded',s:botResponded},
+          {t:'Bot asked about bed/bath count',s:bedBathAsked},
+          {t:'Quote link received',s:quoteLinkReceived},
+          {t:'Bot did NOT ask for square footage',s:!sqftAsked},
+          {t:'Customer record created',s:cust.length>0},
+          {t:'Lead created',s:leads.length>0},
+        ];
+      } else {
+        checks=[
+          {t:'Bot responded',s:botResponded},
+          {t:'Booking completed',s:booked},
+          {t:'Customer record created',s:cust.length>0},
+          {t:'Lead created',s:leads.length>0},
+        ];
+      }
       showChecks('chkSms',checks);
       const p=checks.filter(c=>c.s).length;
-      setBadge('badgeSms',p>=3?'pass':'fail',`${p}/${checks.length}`);
-      return p>=3?'PASS':'FAIL';
+      const threshold = Math.ceil(checks.length * 0.7);
+      setBadge('badgeSms',p>=threshold?'pass':'fail',`${p}/${checks.length}`);
+      return p>=threshold?'PASS':'FAIL';
     }catch(e){if(e.message==='__STOPPED__')throw e;addSys('tSms','Error: '+e.message,'sys-err');setBadge('badgeSms','fail','ERROR');return 'FAIL';}
   }
 
@@ -596,8 +706,21 @@
     if (!biz.web) { setBadge('badgeWeb','fail','SKIPPED'); addSys('tWeb','No website URL configured.','sys-warn'); return 'SKIPPED'; }
     setBadge('badgeWeb','running','TESTING');addPhase('tWeb','Website Form Submission');
     try {
+      const bizType = biz.type || 'window_cleaning';
       addSys('tWeb','Submitting form to '+biz.web);
-      const formData={name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',address:'742 Evergreen Terrace, Naperville, IL 60540',service:'Exterior window cleaning',message:'Interested in exterior window cleaning for my 2500 sqft home. No French panes. Preferred time: Saturday at 10am.',sqft:'2500',source:'Google search'};
+      const formData = bizType === 'house_cleaning' ? {
+        name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
+        address:'742 Evergreen Terrace, Naperville, IL 60540',
+        service:'Standard house cleaning',
+        message:'Looking for a standard cleaning for my 3 bed 2 bath home. One-time cleaning.',
+        bedrooms:'3',bathrooms:'2',source:'Google search'
+      } : {
+        name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
+        address:'742 Evergreen Terrace, Naperville, IL 60540',
+        service:'Exterior window cleaning',
+        message:'Interested in exterior window cleaning for my 2500 sqft home. No French panes. Preferred time: Saturday at 10am.',
+        sqft:'2500',source:'Google search'
+      };
       Object.entries(formData).forEach(([k,v])=>addSys('tWeb',`  ${k}: ${v}`));
       const res=await fetch(biz.web,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)});
       const status=res.status;document.getElementById('mWebStatus').textContent=status;
@@ -658,7 +781,8 @@
       for (let bi = 0; bi < checked.length; bi++) {
         if (stopRequested) break;
         const biz = checked[bi];
-        document.getElementById('testingBizName').textContent = biz.name;
+        const typeLabel = (biz.type || 'window_cleaning') === 'house_cleaning' ? 'Cleaning Company' : 'Window Cleaning';
+        document.getElementById('testingBizName').textContent = `${biz.name} (${typeLabel})`;
         document.getElementById('testingProgress').textContent = `(${bi + 1}/${checked.length})`;
 
         resetPanels();
