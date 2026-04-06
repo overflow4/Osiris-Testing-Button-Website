@@ -400,7 +400,7 @@
   // ── Business Persistence (Supabase Storage) ──
   async function loadBusinesses() {
     try {
-      const r = await fetch(`${STORAGE_URL}/public/${BIZ_FILE}?t=${Date.now()}`, { headers: supaHeaders });
+      const r = await fetch(`${STORAGE_URL}/authenticated/${BIZ_FILE}?t=${Date.now()}`, { headers: supaHeaders });
       if (r.ok) businesses = await r.json();
     } catch (e) { businesses = []; }
     renderBizList();
@@ -408,8 +408,8 @@
 
   async function saveBusinesses() {
     await fetch(`${STORAGE_URL}/${BIZ_FILE}`, {
-      method: 'PUT',
-      headers: { ...supaHeaders, 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { ...supaHeaders, 'Content-Type': 'text/plain', 'x-upsert': 'true' },
       body: JSON.stringify(businesses)
     });
   }
