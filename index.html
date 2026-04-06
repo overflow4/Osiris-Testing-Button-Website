@@ -112,6 +112,15 @@
     .btn-run-all:hover { filter:brightness(1.12); }
     .btn-run-all:disabled { opacity:0.35; cursor:not-allowed; filter:none; }
 
+    .btn-stop {
+      padding:0.75rem 2rem; font-size:0.95rem;
+      background:var(--red); border:none; color:#fff;
+      box-shadow:0 0 30px var(--red-soft),0 4px 15px #0003;
+      border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-weight:700;
+      transition:all 0.15s; display:none;
+    }
+    .btn-stop:hover { filter:brightness(1.12); }
+
     .run-section { text-align:center; padding:1.5rem; margin-bottom:1.5rem; }
     .global-status { text-align:center; margin-bottom:0.75rem; font-size:0.8rem; color:var(--text-dim); min-height:1.4em; }
     .checked-count { font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem; }
@@ -204,6 +213,7 @@
   <div class="run-section">
     <div class="global-status" id="globalStatus"></div>
     <button class="btn btn-run-all" id="runAllBtn" onclick="runAllTests()" disabled>Run All Tests</button>
+    <button class="btn-stop" id="stopBtn" onclick="stopAllTests()">Stop Tests</button>
     <div class="checked-count" id="checkedCount"></div>
   </div>
 
@@ -300,10 +310,23 @@
 
   let businesses = [];
   let running = false;
+  let stopRequested = false;
   const supaHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
   // ── Helpers ──
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function sleep(ms) {
+    return new Promise((resolve, reject) => {
+      const id = setTimeout(resolve, ms);
+      // Check stop flag periodically during long sleeps
+      const check = setInterval(() => { if (stopRequested) { clearTimeout(id); clearInterval(check); reject(new Error('__STOPPED__')); } }, 500);
+      setTimeout(() => clearInterval(check), ms + 100);
+    });
+  }
+
+  function stopAllTests() {
+    stopRequested = true;
+    setStatus('Stopping tests...');
+  }
   const ts = () => new Date().toLocaleTimeString('en-US', { hour12: false });
 
   async function supaFetch(table, query) {
@@ -515,7 +538,7 @@
       const p=checks.filter(c=>c.s).length;
       setBadge('badgeVoice',p>=5?'pass':'fail',`${p}/${checks.length}`);
       return p>=5?'PASS':'FAIL';
-    } catch(e){addSys('tVoice','Error: '+e.message,'sys-err');setBadge('badgeVoice','fail','ERROR');return 'FAIL';}
+    } catch(e){if(e.message==='__STOPPED__')throw e;addSys('tVoice','Error: '+e.message,'sys-err');setBadge('badgeVoice','fail','ERROR');return 'FAIL';}
   }
 
   // ── SMS Test ──
@@ -565,7 +588,7 @@
       const p=checks.filter(c=>c.s).length;
       setBadge('badgeSms',p>=3?'pass':'fail',`${p}/${checks.length}`);
       return p>=3?'PASS':'FAIL';
-    }catch(e){addSys('tSms','Error: '+e.message,'sys-err');setBadge('badgeSms','fail','ERROR');return 'FAIL';}
+    }catch(e){if(e.message==='__STOPPED__')throw e;addSys('tSms','Error: '+e.message,'sys-err');setBadge('badgeSms','fail','ERROR');return 'FAIL';}
   }
 
   // ── Website Form Test ──
@@ -589,7 +612,7 @@
       const p=checks.filter(c=>c.s).length;
       setBadge('badgeWeb',p>=2?'pass':'fail',`${p}/${checks.length}`);
       return p>=2?'PASS':'FAIL';
-    }catch(e){addSys('tWeb','Error: '+e.message,'sys-err');document.getElementById('mWebStatus').textContent='ERR';setBadge('badgeWeb','fail','ERROR');return 'FAIL';}
+    }catch(e){if(e.message==='__STOPPED__')throw e;addSys('tWeb','Error: '+e.message,'sys-err');document.getElementById('mWebStatus').textContent='ERR';setBadge('badgeWeb','fail','ERROR');return 'FAIL';}
   }
 
   // ── Email Test ──
@@ -604,13 +627,26 @@
   }
 
   // ── Run All Tests on Checked Businesses ──
+  function finishRun() {
+    running = false;
+    stopRequested = false;
+    const btn = document.getElementById('runAllBtn');
+    btn.disabled = false;
+    btn.innerHTML = 'Run All Tests';
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('testingLabel').style.display = 'none';
+    renderBizList();
+  }
+
   async function runAllTests() {
     const checked = getCheckedBiz();
     if (running || checked.length === 0) return;
     running = true;
+    stopRequested = false;
     const btn = document.getElementById('runAllBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-sm"></span> Running Tests...';
+    document.getElementById('stopBtn').style.display = 'inline-block';
     document.getElementById('testGrid').style.display = 'grid';
 
     const testLabel = document.getElementById('testingLabel');
@@ -618,30 +654,50 @@
 
     const allResults = [];
 
-    for (let bi = 0; bi < checked.length; bi++) {
-      const biz = checked[bi];
-      document.getElementById('testingBizName').textContent = biz.name;
-      document.getElementById('testingProgress').textContent = `(${bi + 1}/${checked.length})`;
+    try {
+      for (let bi = 0; bi < checked.length; bi++) {
+        if (stopRequested) break;
+        const biz = checked[bi];
+        document.getElementById('testingBizName').textContent = biz.name;
+        document.getElementById('testingProgress').textContent = `(${bi + 1}/${checked.length})`;
 
-      resetPanels();
-      setStatus(`Testing "${biz.name}" (${bi + 1}/${checked.length})...`);
+        resetPanels();
+        setStatus(`Testing "${biz.name}" (${bi + 1}/${checked.length})...`);
 
-      await resetTestData();
-      setStatus(`[${biz.name}] Test 1/4: Voice call...`);
-      const voice = await testVoice(biz);
+        await resetTestData();
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 1/4: Voice call...`);
+        const voice = await testVoice(biz);
 
-      await resetTestData();
-      setStatus(`[${biz.name}] Test 2/4: SMS...`);
-      const sms = await testSms(biz);
+        if (stopRequested) break;
+        await resetTestData();
+        setStatus(`[${biz.name}] Test 2/4: SMS...`);
+        const sms = await testSms(biz);
 
-      await resetTestData();
-      setStatus(`[${biz.name}] Test 3/4: Website form...`);
-      const web = await testWebForm(biz);
+        if (stopRequested) break;
+        await resetTestData();
+        setStatus(`[${biz.name}] Test 3/4: Website form...`);
+        const web = await testWebForm(biz);
 
-      setStatus(`[${biz.name}] Test 4/4: Email...`);
-      const email = await testEmail(biz);
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 4/4: Email...`);
+        const email = await testEmail(biz);
 
-      allResults.push({ name: biz.name, voice, sms, web, email });
+        allResults.push({ name: biz.name, voice, sms, web, email });
+      }
+    } catch (e) {
+      if (e.message === '__STOPPED__') {
+        setStatus('Tests stopped.');
+        finishRun();
+        return;
+      }
+      throw e;
+    }
+
+    if (stopRequested) {
+      setStatus('Tests stopped.');
+      finishRun();
+      return;
     }
 
     // Send notification
@@ -650,11 +706,7 @@
     await sendNotification(`Osiris E2E tests done. ${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 
-    testLabel.style.display = 'none';
-    running = false;
-    btn.disabled = false;
-    btn.innerHTML = 'Run All Tests';
-    renderBizList();
+    finishRun();
   }
 
   // ── Init ──
