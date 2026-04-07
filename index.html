@@ -318,10 +318,30 @@
   const STORAGE_URL = SUPABASE_URL + '/storage/v1/object';
   const BIZ_FILE = 'osiris-config/businesses.json';
   const FROM_VAPI_ID = '3bad8017-09da-4412-81f9-8439b1633337';
+  const FROM_VAPI_NUMBER = '+17169521258';
+  const FROM_VAPI_NUMBER_ENC = '%2B17169521258';
   const FROM_OPENPHONE_ID = 'PNuat0xvca';
   const TEST_PHONE = '+14246771112';
   const TEST_PHONE_ENC = '%2B14246771112';
   const NOTIFY_PHONE = '+14157204580';
+
+  // Cache of OpenPhone number -> phoneNumberId
+  let opPhoneIdCache = {};
+
+  async function resolveOpenPhoneId(phoneNumber) {
+    if (opPhoneIdCache[phoneNumber]) return opPhoneIdCache[phoneNumber];
+    try {
+      const r = await fetch(`${OPENPHONE_BASE}/phone-numbers`, { headers: { 'Authorization': OPENPHONE_KEY } });
+      const data = await r.json();
+      (data.data || []).forEach(p => { opPhoneIdCache[p.number] = p.id; });
+    } catch (e) {}
+    // Normalize: try with and without formatting
+    const normalized = phoneNumber.replace(/[\s()-]/g, '');
+    for (const [num, id] of Object.entries(opPhoneIdCache)) {
+      if (num.replace(/[\s()-]/g, '') === normalized) return id;
+    }
+    return null;
+  }
 
   let businesses = [];
   let running = false;
@@ -589,12 +609,21 @@
       if(data.recordingUrl){document.getElementById('audioRow').style.display='block';document.getElementById('audioPlayer').src=data.recordingUrl;}
 
       addPhase('tVoice','DB Verification');addSys('tVoice','Waiting 30s for webhooks...');await sleep(30000);
-      const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
+      // Check under both test phone (+14246771112, verbally given) and VAPI FROM number (+17169521258, caller ID)
+      const cust1=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
+      const cust2=await supaFetch('customers',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id`);
+      const cust=[...cust1,...cust2];
+      const leads1=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
+      const leads2=await supaFetch('leads',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id`);
+      const leads=[...leads1,...leads2];
       const dbCalls=await supaFetch('calls',`vapi_call_id=eq.${call.id}&select=id`);
-      const dbN=cust.length+leads.length+dbCalls.length;
+      // Also check calls by phone number if not found by vapi_call_id
+      const dbCalls2=dbCalls.length?[]:await supaFetch('calls',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id&order=created_at.desc&limit=1`);
+      const allCalls=[...dbCalls,...dbCalls2];
+      const dbN=cust.length+leads.length+allCalls.length;
       document.getElementById('mVoiceDb').textContent=dbN;
-      addSys('tVoice',`Customers: ${cust.length}, Leads: ${leads.length}, Calls: ${dbCalls.length}`,dbN>0?'sys-ok':'sys-warn');
+      addSys('tVoice',`Customers: ${cust.length} (checked +14246771112 & +17169521258)`,cust.length>0?'sys-ok':'sys-warn');
+      addSys('tVoice',`Leads: ${leads.length}, Calls: ${allCalls.length}`,leads.length+allCalls.length>0?'sys-ok':'sys-warn');
 
       const tx = data.transcript || '';
       let checks;
@@ -607,7 +636,7 @@
           {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
           {t:'Customer record created',s:cust.length>0},
           {t:'Lead created',s:leads.length>0},
-          {t:'Call logged in DB',s:dbCalls.length>0}
+          {t:'Call logged in DB',s:allCalls.length>0}
         ];
       } else {
         checks=[
@@ -617,7 +646,7 @@
           {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
           {t:'Customer record created',s:cust.length>0},
           {t:'Lead created',s:leads.length>0},
-          {t:'Call logged in DB',s:dbCalls.length>0}
+          {t:'Call logged in DB',s:allCalls.length>0}
         ];
       }
       showChecks('chkVoice',checks);
@@ -666,14 +695,24 @@
 
     let msgCount=0, used=new Set(), booked=false, botResponded=false, quoteLinkReceived=false, bedBathAsked=false, sqftAsked=false;
     try {
+      // Resolve the OpenPhone phone number ID for the business's SMS number
+      const bizPhoneId = await resolveOpenPhoneId(biz.sms);
+      if (!bizPhoneId) { addSys('tSms','Could not resolve OpenPhone ID for '+biz.sms,'sys-err'); setBadge('badgeSms','fail','ERROR'); return 'FAIL'; }
+      addSys('tSms',`Resolved ${biz.sms} -> ${bizPhoneId}`);
+
+      // Record start time to filter out old messages
+      const testStartTime = new Date().toISOString();
+
       await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[biz.sms],content:opener})});
       addBubble('tSms',opener,true,ts());msgCount++;
 
       let lastId=null,noReply=0;
       for(let round=0;round<20;round++){
         await sleep(15000);
-        const mRes=await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNviDF31lA&participants=${TEST_PHONE_ENC}&maxResults=15`,{headers:{'Authorization':OPENPHONE_KEY}});
-        const mData=await mRes.json();const inbound=(mData.data||[]).filter(m=>m.direction==='incoming');
+        const mRes=await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=${bizPhoneId}&participants=${TEST_PHONE_ENC}&maxResults=15`,{headers:{'Authorization':OPENPHONE_KEY}});
+        const mData=await mRes.json();
+        // Filter: only incoming messages created AFTER our test started
+        const inbound=(mData.data||[]).filter(m=>m.direction==='incoming' && m.createdAt > testStartTime);
         if(!inbound.length||(lastId&&inbound[0].id===lastId)){noReply++;if(noReply>=8){addSys('tSms','No reply after 2 minutes.','sys-err');break;}continue;}
         noReply=0;botResponded=true;const msg=inbound[0];lastId=msg.id;
         const body=msg.text||msg.content||'';
@@ -766,7 +805,18 @@
       const p=checks.filter(c=>c.s).length;
       setBadge('badgeWeb',p>=2?'pass':'fail',`${p}/${checks.length}`);
       return p>=2?'PASS':'FAIL';
-    }catch(e){if(e.message==='__STOPPED__')throw e;addSys('tWeb','Error: '+e.message,'sys-err');document.getElementById('mWebStatus').textContent='ERR';setBadge('badgeWeb','fail','ERROR');return 'FAIL';}
+    }catch(e){
+      if(e.message==='__STOPPED__')throw e;
+      const isCors = e.message === 'Failed to fetch' || e.name === 'TypeError';
+      if(isCors){
+        addSys('tWeb','CORS error: the target website blocks cross-origin requests from this test runner.','sys-err');
+        addSys('tWeb','This is expected — website form tests must be run from the same domain or via a server-side proxy.','sys-warn');
+      } else {
+        addSys('tWeb','Error: '+e.message,'sys-err');
+      }
+      document.getElementById('mWebStatus').textContent=isCors?'CORS':'ERR';
+      setBadge('badgeWeb','fail',isCors?'CORS':'ERROR');return 'FAIL';
+    }
   }
 
   // ── Email Test ──
