@@ -328,19 +328,18 @@
   // Cache of OpenPhone number -> phoneNumberId
   let opPhoneIdCache = {};
 
+  // Strip formatting from phone numbers: "+1(424) 677-1146" -> "+14246771146"
+  function normalizePhone(p) { return p ? p.replace(/[\s()\-\.]/g, '') : p; }
+
   async function resolveOpenPhoneId(phoneNumber) {
-    if (opPhoneIdCache[phoneNumber]) return opPhoneIdCache[phoneNumber];
+    const norm = normalizePhone(phoneNumber);
+    if (opPhoneIdCache[norm]) return opPhoneIdCache[norm];
     try {
       const r = await fetch(`${OPENPHONE_BASE}/phone-numbers`, { headers: { 'Authorization': OPENPHONE_KEY } });
       const data = await r.json();
-      (data.data || []).forEach(p => { opPhoneIdCache[p.number] = p.id; });
+      (data.data || []).forEach(p => { opPhoneIdCache[normalizePhone(p.number)] = p.id; });
     } catch (e) {}
-    // Normalize: try with and without formatting
-    const normalized = phoneNumber.replace(/[\s()-]/g, '');
-    for (const [num, id] of Object.entries(opPhoneIdCache)) {
-      if (num.replace(/[\s()-]/g, '') === normalized) return id;
-    }
-    return null;
+    return opPhoneIdCache[norm] || null;
   }
 
   let businesses = [];
@@ -563,10 +562,11 @@
   // ── Voice Test ──
   async function testVoice(biz) {
     if (!biz.vapi) { setBadge('badgeVoice','fail','SKIPPED'); addSys('tVoice','No VAPI number configured.','sys-warn'); return 'SKIPPED'; }
+    const vapiNumber = normalizePhone(biz.vapi);
     const bizType = biz.type || 'window_cleaning';
     setBadge('badgeVoice','running','CALLING');
     addPhase('tVoice','Voice Call');
-    addSys('tVoice','Dialing ' + biz.vapi + '...');
+    addSys('tVoice','Dialing ' + vapiNumber + '...');
 
     const voicePrompts = {
       window_cleaning: {
@@ -584,7 +584,7 @@
       const res = await fetch(`${VAPI_BASE}/call`, {
         method:'POST', headers:{'Authorization':`Bearer ${VAPI_KEY}`,'Content-Type':'application/json'},
         body: JSON.stringify({
-          phoneNumberId: FROM_VAPI_ID, customer: { number: biz.vapi },
+          phoneNumberId: FROM_VAPI_ID, customer: { number: vapiNumber },
           assistant: {
             model: { model:'gpt-4o-mini', provider:'openai', messages:[{role:'system', content: vp.system}]},
             voice:{model:'eleven_turbo_v2_5',voiceId:'pNInz6obpgDQGcFmaJgB',provider:'11labs'},
@@ -625,6 +625,34 @@
       addSys('tVoice',`Customers: ${cust.length} (checked +14246771112 & +17169521258)`,cust.length>0?'sys-ok':'sys-warn');
       addSys('tVoice',`Leads: ${leads.length}, Calls: ${allCalls.length}`,leads.length+allCalls.length>0?'sys-ok':'sys-warn');
 
+      // Check for post-call SMS (e.g. quote link texted after call)
+      let postCallSms = false;
+      if (biz.sms) {
+        addPhase('tVoice','Post-Call SMS Check');
+        addSys('tVoice','Checking for follow-up text message...');
+        const smsNum = normalizePhone(biz.sms);
+        const smsPhoneId = await resolveOpenPhoneId(smsNum);
+        if (smsPhoneId) {
+          // Check Cold Caller inbox for messages from the business number
+          const callStartTime = data.startedAt;
+          for (let poll = 0; poll < 4; poll++) {
+            await sleep(10000);
+            const mr = await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNuat0xvca&participants=${encodeURIComponent(smsNum)}&maxResults=5`,{headers:{'Authorization':OPENPHONE_KEY}});
+            const md = await mr.json();
+            const postMsgs = (md.data||[]).filter(m => m.direction === 'incoming' && m.createdAt > callStartTime);
+            if (postMsgs.length > 0) {
+              postCallSms = true;
+              addPhase('tVoice','Post-Call Text');
+              postMsgs.reverse().forEach(m => {
+                addBubble('tVoice', m.text || m.content || '', false, new Date(m.createdAt).toLocaleTimeString('en-US',{hour12:false}));
+              });
+              break;
+            }
+          }
+          if (!postCallSms) addSys('tVoice','No follow-up SMS received after call.','sys-warn');
+        }
+      }
+
       const tx = data.transcript || '';
       let checks;
       if (bizType === 'house_cleaning') {
@@ -634,6 +662,7 @@
           {t:'Bot asked about bed/bath',s:/bed|bath/i.test(tx)},
           {t:'Quote/price mentioned or texted',s:/quote|price|\$|text/i.test(tx)},
           {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
+          {t:'Post-call SMS with quote received',s:postCallSms},
           {t:'Customer record created',s:cust.length>0},
           {t:'Lead created',s:leads.length>0},
           {t:'Call logged in DB',s:allCalls.length>0}
@@ -695,15 +724,16 @@
 
     let msgCount=0, used=new Set(), booked=false, botResponded=false, quoteLinkReceived=false, bedBathAsked=false, sqftAsked=false;
     try {
-      // Resolve the OpenPhone phone number ID for the business's SMS number
-      const bizPhoneId = await resolveOpenPhoneId(biz.sms);
-      if (!bizPhoneId) { addSys('tSms','Could not resolve OpenPhone ID for '+biz.sms,'sys-err'); setBadge('badgeSms','fail','ERROR'); return 'FAIL'; }
-      addSys('tSms',`Resolved ${biz.sms} -> ${bizPhoneId}`);
+      // Normalize + resolve the OpenPhone phone number ID for the business's SMS number
+      const smsNumber = normalizePhone(biz.sms);
+      const bizPhoneId = await resolveOpenPhoneId(smsNumber);
+      if (!bizPhoneId) { addSys('tSms','Could not resolve OpenPhone ID for '+smsNumber,'sys-err'); setBadge('badgeSms','fail','ERROR'); return 'FAIL'; }
+      addSys('tSms',`Resolved ${smsNumber} -> ${bizPhoneId}`);
 
       // Record start time to filter out old messages
       const testStartTime = new Date().toISOString();
 
-      await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[biz.sms],content:opener})});
+      await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[smsNumber],content:opener})});
       addBubble('tSms',opener,true,ts());msgCount++;
 
       let lastId=null,noReply=0;
@@ -736,7 +766,7 @@
         if(bizType === 'window_cleaning' && /confirm|booked|all set|see you|appointment.*set/i.test(body)){booked=true;addSys('tSms','Booking confirmed!','sys-ok');break;}
 
         let replied=false;
-        for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[biz.sms],content:replies[i].reply})});addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
+        for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[smsNumber],content:replies[i].reply})});addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
       }
       document.getElementById('mSmsMsgs').textContent=msgCount;
       addPhase('tSms','DB Verification');await sleep(5000);
@@ -792,10 +822,17 @@
         sqft:'2500',source:'Google search'
       };
       Object.entries(formData).forEach(([k,v])=>addSys('tWeb',`  ${k}: ${v}`));
-      const res=await fetch(biz.web,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)});
-      const status=res.status;document.getElementById('mWebStatus').textContent=status;
-      addSys('tWeb',`Response: HTTP ${status}`,status<300?'sys-ok':'sys-err');
-      try{const body=await res.text();addSys('tWeb','Body: '+body.slice(0,200));}catch(e){}
+      addSys('tWeb','Sending via server-side proxy to avoid CORS...');
+      const proxyRes=await fetch('/api/proxy-form',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({targetUrl:biz.web, formData})
+      });
+      const proxyData=await proxyRes.json();
+      const status=proxyData.status;
+      document.getElementById('mWebStatus').textContent=status||'ERR';
+      addSys('tWeb',`Response: HTTP ${status} ${proxyData.statusText||''}`,status&&status<300?'sys-ok':'sys-err');
+      if(proxyData.body)addSys('tWeb','Body: '+proxyData.body.slice(0,200));
       await sleep(10000);
       const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
       const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
@@ -807,15 +844,9 @@
       return p>=2?'PASS':'FAIL';
     }catch(e){
       if(e.message==='__STOPPED__')throw e;
-      const isCors = e.message === 'Failed to fetch' || e.name === 'TypeError';
-      if(isCors){
-        addSys('tWeb','CORS error: the target website blocks cross-origin requests from this test runner.','sys-err');
-        addSys('tWeb','This is expected — website form tests must be run from the same domain or via a server-side proxy.','sys-warn');
-      } else {
-        addSys('tWeb','Error: '+e.message,'sys-err');
-      }
-      document.getElementById('mWebStatus').textContent=isCors?'CORS':'ERR';
-      setBadge('badgeWeb','fail',isCors?'CORS':'ERROR');return 'FAIL';
+      addSys('tWeb','Error: '+e.message,'sys-err');
+      document.getElementById('mWebStatus').textContent='ERR';
+      setBadge('badgeWeb','fail','ERROR');return 'FAIL';
     }
   }
 
@@ -823,11 +854,47 @@
   async function testEmail(biz) {
     if (!biz.email) { setBadge('badgeEmail','fail','SKIPPED'); addSys('tEmail','No email configured.','sys-warn'); return 'SKIPPED'; }
     setBadge('badgeEmail','running','TESTING');addPhase('tEmail','Email Test');
-    addSys('tEmail',`Target: ${biz.email}`);
-    addSys('tEmail','Email testing requires a send endpoint integration.','sys-warn');
-    document.getElementById('mEmailStatus').textContent='N/A';
-    setBadge('badgeEmail','fail','SKIPPED');
-    return 'SKIPPED';
+    addSys('tEmail',`Sending test email to ${biz.email}...`);
+    try {
+      const emailBody = `<p>Hi, I'm interested in getting a cleaning quote.</p>
+<p><strong>Name:</strong> Alex Thompson<br>
+<strong>Phone:</strong> (424) 677-1112<br>
+<strong>Address:</strong> 742 Evergreen Terrace, Naperville, IL 60540<br>
+<strong>Service:</strong> ${(biz.type||'window_cleaning')==='house_cleaning'?'Standard house cleaning (3 bed / 2 bath)':'Exterior window cleaning (2500 sqft)'}<br>
+<strong>Preferred time:</strong> Saturday at 10am</p>
+<p>Found you through Google search. Thanks!</p>`;
+
+      const res = await fetch('/api/proxy-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: biz.email,
+          subject: 'Cleaning Inquiry - Alex Thompson',
+          body: emailBody
+        })
+      });
+      const data = await res.json();
+
+      if (data.sent) {
+        document.getElementById('mEmailStatus').textContent = 'Sent';
+        addSys('tEmail', `Email sent via ${data.provider}`, 'sys-ok');
+        if (data.response) addSys('tEmail', 'Response: ' + JSON.stringify(data.response).slice(0,200));
+        setBadge('badgeEmail', 'pass', 'SENT');
+        return 'PASS';
+      } else {
+        document.getElementById('mEmailStatus').textContent = 'N/A';
+        addSys('tEmail', data.error || 'Email not sent', 'sys-warn');
+        addSys('tEmail', 'To enable: set RESEND_API_KEY env var on Vercel.', 'sys-warn');
+        setBadge('badgeEmail', 'fail', 'NO PROVIDER');
+        return 'SKIPPED';
+      }
+    } catch(e) {
+      if(e.message==='__STOPPED__')throw e;
+      addSys('tEmail','Error: '+e.message,'sys-err');
+      document.getElementById('mEmailStatus').textContent='ERR';
+      setBadge('badgeEmail','fail','ERROR');
+      return 'FAIL';
+    }
   }
 
   // ── Run All Tests on Checked Businesses ──
