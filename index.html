@@ -541,11 +541,14 @@
 
   // ── Data Reset ──
   async function resetTestData() {
-    for (const t of ['messages','calls','system_events','followup_queue','scheduled_tasks']) await supaDelete(t, `phone_number=eq.${TEST_PHONE_ENC}`);
-    await supaPatch('leads', `phone_number=eq.${TEST_PHONE_ENC}`, { converted_to_job_id: null });
-    await supaDelete('leads', `phone_number=eq.${TEST_PHONE_ENC}`);
-    await supaDelete('jobs', `phone_number=eq.${TEST_PHONE_ENC}`);
-    await supaDelete('customers', `phone_number=eq.${TEST_PHONE_ENC}`);
+    // Clean both the test phone AND the VAPI FROM number (system may store either)
+    for (const phone of [TEST_PHONE_ENC, FROM_VAPI_NUMBER_ENC]) {
+      for (const t of ['messages','calls','system_events','followup_queue','scheduled_tasks']) await supaDelete(t, `phone_number=eq.${phone}`);
+      await supaPatch('leads', `phone_number=eq.${phone}`, { converted_to_job_id: null });
+      await supaDelete('leads', `phone_number=eq.${phone}`);
+      await supaDelete('jobs', `phone_number=eq.${phone}`);
+      await supaDelete('customers', `phone_number=eq.${phone}`);
+    }
   }
 
   // ── Notification ──
