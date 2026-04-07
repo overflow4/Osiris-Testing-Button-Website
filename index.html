@@ -292,7 +292,7 @@
 <!-- Add Business Modal -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
-    <h2>Add Business</h2>
+    <h2 id="modalTitle">Add Business</h2>
     <label><span class="lbl">Business Name *</span><input type="text" id="inBizName" placeholder="e.g. WinBros Window Cleaning"></label>
     <label><span class="lbl">Business Type *</span><select id="inBizType"><option value="window_cleaning">Window Cleaning (WinBros-style)</option><option value="house_cleaning">Cleaning Company (Spotless-style)</option></select></label>
     <label><span class="lbl">VAPI Phone Number (for voice calls)</span><input type="text" id="inVapi" placeholder="+15103705908"></label>
@@ -301,7 +301,7 @@
     <label><span class="lbl">Email Address (for email testing)</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-accent" onclick="saveBiz()">Add Business</button>
+      <button class="btn btn-accent" id="modalSaveBtn" onclick="saveBiz()">Add Business</button>
     </div>
   </div>
 </div>
@@ -428,7 +428,7 @@
       const btCls = bt === 'house_cleaning' ? 'biz-type-hc' : 'biz-type-wc';
       chip.innerHTML = `
         <input type="checkbox" ${b.checked ? 'checked' : ''} onclick="event.stopPropagation(); toggleBiz(${i})">
-        <span onclick="toggleBiz(${i})">${b.name}<span class="biz-type-badge ${btCls}">${btLabel}</span></span>
+        <span onclick="event.stopPropagation(); editBiz(${i})" style="cursor:pointer">${b.name}<span class="biz-type-badge ${btCls}">${btLabel}</span></span>
         <span class="biz-remove" onclick="event.stopPropagation();removeBiz(${i})">\u00D7</span>
       `;
       list.appendChild(chip);
@@ -457,8 +457,33 @@
     renderBizList();
   }
 
-  function openModal() { document.getElementById('modalOverlay').classList.add('open'); document.getElementById('inBizName').focus(); }
+  let editingBizIdx = -1;
+
+  function openModal() {
+    editingBizIdx = -1;
+    document.getElementById('modalTitle').textContent = 'Add Business';
+    document.getElementById('modalSaveBtn').textContent = 'Add Business';
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('inBizName').focus();
+  }
+
+  function editBiz(i) {
+    editingBizIdx = i;
+    const b = businesses[i];
+    document.getElementById('inBizName').value = b.name || '';
+    document.getElementById('inBizType').value = b.type || 'window_cleaning';
+    document.getElementById('inVapi').value = b.vapi || '';
+    document.getElementById('inSms').value = b.sms || '';
+    document.getElementById('inWeb').value = b.web || '';
+    document.getElementById('inEmail').value = b.email || '';
+    document.getElementById('modalTitle').textContent = 'Edit Business';
+    document.getElementById('modalSaveBtn').textContent = 'Save Changes';
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('inBizName').focus();
+  }
+
   function closeModal() {
+    editingBizIdx = -1;
     document.getElementById('modalOverlay').classList.remove('open');
     ['inBizName','inVapi','inSms','inWeb','inEmail'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inBizType').selectedIndex = 0;
@@ -467,15 +492,21 @@
   function saveBiz() {
     const name = document.getElementById('inBizName').value.trim();
     if (!name) return;
-    businesses.push({
+    const data = {
       name,
       type: document.getElementById('inBizType').value,
       vapi: document.getElementById('inVapi').value.trim(),
       sms: document.getElementById('inSms').value.trim(),
       web: document.getElementById('inWeb').value.trim(),
       email: document.getElementById('inEmail').value.trim(),
-      checked: true
-    });
+    };
+    if (editingBizIdx >= 0) {
+      data.checked = businesses[editingBizIdx].checked;
+      businesses[editingBizIdx] = data;
+    } else {
+      data.checked = true;
+      businesses.push(data);
+    }
     saveBusinesses();
     closeModal();
     renderBizList();
