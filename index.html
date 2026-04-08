@@ -745,7 +745,8 @@
         const mRes=await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=${bizPhoneId}&participants=${TEST_PHONE_ENC}&maxResults=15`,{headers:{'Authorization':OPENPHONE_KEY}});
         const mData=await mRes.json();
         // Filter: only incoming messages created AFTER our test started
-        const inbound=(mData.data||[]).filter(m=>m.direction==='incoming' && m.createdAt > testStartTime);
+        // On business phone: outgoing = bot replies TO customer, incoming = customer messages
+        const inbound=(mData.data||[]).filter(m=>m.direction==='outgoing' && m.createdAt > testStartTime);
         if(!inbound.length||(lastId&&inbound[0].id===lastId)){noReply++;if(noReply>=8){addSys('tSms','No reply after 2 minutes.','sys-err');break;}continue;}
         noReply=0;botResponded=true;const msg=inbound[0];lastId=msg.id;
         const body=msg.text||msg.content||'';
@@ -810,26 +811,34 @@
     setBadge('badgeWeb','running','TESTING');addPhase('tWeb','Website Form Submission');
     try {
       const bizType = biz.type || 'window_cleaning';
-      addSys('tWeb','Submitting form to '+biz.web);
+      // Build the correct form endpoint URL
+      let formUrl = biz.web.replace(/\/+$/, '');
+      // If user gave the homepage, append the API endpoint
+      if (!/\/api\//.test(formUrl)) {
+        const slug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
+        formUrl += `/api/webhooks/website/${slug}`;
+      }
+      addSys('tWeb','Submitting form to '+formUrl);
+      // Use correct field names matching the actual form (service_type, not service)
       const formData = bizType === 'house_cleaning' ? {
         name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
         address:'742 Evergreen Terrace, Naperville, IL 60540',
-        service:'Standard house cleaning',
+        service_type:'Standard cleaning',
         message:'Looking for a standard cleaning for my 3 bed 2 bath home. One-time cleaning.',
-        bedrooms:'3',bathrooms:'2',source:'Google search'
+        source:'Google search'
       } : {
         name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
         address:'742 Evergreen Terrace, Naperville, IL 60540',
-        service:'Exterior window cleaning',
+        service_type:'Exterior window cleaning',
         message:'Interested in exterior window cleaning for my 2500 sqft home. No French panes. Preferred time: Saturday at 10am.',
-        sqft:'2500',source:'Google search'
+        source:'Google search'
       };
       Object.entries(formData).forEach(([k,v])=>addSys('tWeb',`  ${k}: ${v}`));
       addSys('tWeb','Sending via server-side proxy to avoid CORS...');
       const proxyRes=await fetch('/api/proxy-form',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({targetUrl:biz.web, formData})
+        body:JSON.stringify({targetUrl:formUrl, formData})
       });
       const proxyData=await proxyRes.json();
       const status=proxyData.status;
@@ -887,7 +896,7 @@
       } else {
         document.getElementById('mEmailStatus').textContent = 'N/A';
         addSys('tEmail', data.error || 'Email not sent', 'sys-warn');
-        addSys('tEmail', 'To enable: set RESEND_API_KEY env var on Vercel.', 'sys-warn');
+        addSys('tEmail', 'To enable: set GMAIL_USER and GMAIL_APP_PASSWORD env vars on Vercel.', 'sys-warn');
         setBadge('badgeEmail', 'fail', 'NO PROVIDER');
         return 'SKIPPED';
       }
