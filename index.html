@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Jack's Tester</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0a0a0a; --surface: #121212; --surface-2: #1a1a1a; --surface-3: #242424;
-      --border: #2e2e2e; --border-light: #3a3a3a;
-      --text: #e8e8e8; --text-dim: #888888; --text-muted: #5a5a5a;
+      --bg: #0a1628; --surface: #0f1d32; --surface-2: #142640; --surface-3: #1a304d;
+      --border: #1e3a5f; --border-light: #254a73;
+      --text: #e8ecf0; --text-dim: #8899aa; --text-muted: #5a7088;
       --accent: #ef4444; --accent-soft: #ef444420; --accent-glow: #ef444450;
       --green: #34d399; --green-soft: #34d39920;
       --red: #f87171; --red-soft: #f8717120;
@@ -23,7 +23,7 @@
 
     .topbar { border-bottom:1px solid var(--border); background:var(--surface); padding:0.8rem 2rem; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
     .topbar-left { display:flex; align-items:center; gap:0.8rem; }
-    .logo { font-size:1.1rem; font-weight:800; letter-spacing:-0.03em; background:linear-gradient(135deg,var(--accent),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .logo { font-family:'Poppins',sans-serif; font-size:1.4rem; font-weight:900; letter-spacing:0.05em; text-transform:uppercase; color:#ef4444; -webkit-text-fill-color:#ef4444; background:none; -webkit-background-clip:unset; }
     .logo-div { width:1px; height:18px; background:var(--border); }
     .logo-sub { font-size:0.78rem; color:var(--text-dim); font-weight:500; }
 
@@ -117,7 +117,7 @@
     .btn-ghost:hover { color:var(--text); }
     .btn-run-all {
       padding:0.75rem 2rem; font-size:0.95rem;
-      background:linear-gradient(135deg,var(--accent),#dc2626);
+      background:linear-gradient(135deg,var(--accent),#b91c1c);
       border:none; color:#fff;
       box-shadow:0 0 30px var(--accent-glow),0 4px 15px #0003;
       border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-weight:700;
