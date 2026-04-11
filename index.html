@@ -19,7 +19,7 @@
       --blue: #60a5fa; --cyan: #22d3ee;
       --radius: 14px; --radius-sm: 10px;
     }
-    body { font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; line-height:1.6; }
+    body { font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; line-height:1.6; overflow:hidden; display:flex; flex-direction:column; }
 
     .topbar { border-bottom:1px solid var(--border); background:var(--surface); padding:0.8rem 2rem; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
     .topbar-left { display:flex; align-items:center; gap:0.8rem; }
@@ -27,7 +27,7 @@
     .logo-div { width:1px; height:18px; background:var(--border); }
     .logo-sub { font-size:0.78rem; color:var(--text-dim); font-weight:500; }
 
-    .main { max-width:1400px; margin:0 auto; padding:1.5rem 2rem 3rem; }
+    .main { max-width:1400px; margin:0 auto; padding:1.5rem 2rem 3rem; overflow-y:auto; flex:1; }
     .section { margin-bottom:1.5rem; }
     .section-title { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--text-muted); margin-bottom:0.6rem; font-weight:600; }
 
