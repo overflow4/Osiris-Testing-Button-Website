@@ -254,6 +254,7 @@
         <div class="left"><div class="icon-box icon-sms">&#128172;</div><h3>SMS</h3></div>
         <span class="badge badge-idle" id="badgeSms">IDLE</span>
       </div>
+      <div id="smsRoute" style="padding:0.3rem 0.9rem;font-size:0.7rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace;display:none;"></div>
       <div class="tpanel-metrics">
         <div class="tpanel-metric"><div class="val" id="mSmsMsgs">--</div><div class="lbl">Messages</div></div>
         <div class="tpanel-metric"><div class="val" id="mSmsDb">--</div><div class="lbl">DB Records</div></div>
@@ -693,6 +694,9 @@
     if (!biz.sms) { setBadge('badgeSms','fail','SKIPPED'); addSys('tSms','No SMS number configured.','sys-warn'); return 'SKIPPED'; }
     const bizType = biz.type || 'window_cleaning';
     setBadge('badgeSms','running','TEXTING');
+    const smsRouteEl = document.getElementById('smsRoute');
+    smsRouteEl.textContent = `${TEST_PHONE} → ${normalizePhone(biz.sms)}`;
+    smsRouteEl.style.display = 'block';
     addPhase('tSms','SMS Conversation');
 
     let replies, opener;
