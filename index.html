@@ -935,19 +935,71 @@
       });
       const data = await res.json();
 
-      if (data.sent) {
-        document.getElementById('mEmailStatus').textContent = 'Sent';
-        addSys('tEmail', `Email sent via ${data.provider}`, 'sys-ok');
-        if (data.response) addSys('tEmail', 'Response: ' + JSON.stringify(data.response).slice(0,200));
-        setBadge('badgeEmail', 'pass', 'SENT');
-        return 'PASS';
-      } else {
+      if (!data.sent) {
         document.getElementById('mEmailStatus').textContent = 'N/A';
         addSys('tEmail', data.error || 'Email not sent', 'sys-warn');
         addSys('tEmail', 'To enable: set GMAIL_USER and GMAIL_APP_PASSWORD env vars on Vercel.', 'sys-warn');
         setBadge('badgeEmail', 'fail', 'NO PROVIDER');
         return 'SKIPPED';
       }
+
+      document.getElementById('mEmailStatus').textContent = 'Sent';
+      addSys('tEmail', `Email sent via ${data.provider}`, 'sys-ok');
+
+      // Wait for processing then check DB
+      addPhase('tEmail','DB Verification');
+      addSys('tEmail','Waiting 15s for webhooks...');
+      await sleep(15000);
+      const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
+      const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
+      document.getElementById('mEmailDb').textContent=cust.length+leads.length;
+
+      // Check for follow-up SMS with quote/invoice
+      let postEmailSms = false;
+      let smsContent = '';
+      let invoiceLink = false;
+      if (biz.sms) {
+        addPhase('tEmail','Post-Email SMS Check');
+        addSys('tEmail','Checking for follow-up SMS with quote/invoice...');
+        const smsNum = normalizePhone(biz.sms);
+        const smsPhoneId = await resolveOpenPhoneId(smsNum);
+        if (smsPhoneId) {
+          for (let poll = 0; poll < 4; poll++) {
+            await sleep(10000);
+            const mr = await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNuat0xvca&participants=${encodeURIComponent(smsNum)}&maxResults=10`,{headers:{'Authorization':OPENPHONE_KEY}});
+            const md = await mr.json();
+            const recentMsgs = (md.data||[]).filter(m => m.direction === 'incoming' && new Date(m.createdAt) > new Date(Date.now() - 120000));
+            if (recentMsgs.length > 0) {
+              postEmailSms = true;
+              addPhase('tEmail','Follow-up SMS');
+              recentMsgs.reverse().forEach(m => {
+                const txt = m.text || m.content || '';
+                smsContent += txt + ' ';
+                addBubble('tEmail', txt, false, new Date(m.createdAt).toLocaleTimeString('en-US',{hour12:false}));
+              });
+              invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
+              break;
+            }
+          }
+          if (!postEmailSms) addSys('tEmail','No follow-up SMS received after email.','sys-warn');
+        } else {
+          addSys('tEmail','Could not resolve OpenPhone ID — skipping SMS check.','sys-warn');
+        }
+      } else {
+        addSys('tEmail','No SMS number configured — skipping SMS check.','sys-warn');
+      }
+
+      const checks=[
+        {t:'Email sent successfully',s:true},
+        {t:'Customer record created',s:cust.length>0},
+        {t:'Lead created',s:leads.length>0},
+        {t:'Follow-up SMS received',s:postEmailSms},
+        {t:'SMS contains quote/invoice link',s:invoiceLink},
+      ];
+      showChecks('chkEmail',checks);
+      const p=checks.filter(c=>c.s).length;
+      setBadge('badgeEmail',p>=4?'pass':'fail',`${p}/${checks.length}`);
+      return p>=4?'PASS':'FAIL';
     } catch(e) {
       if(e.message==='__STOPPED__')throw e;
       addSys('tEmail','Error: '+e.message,'sys-err');
