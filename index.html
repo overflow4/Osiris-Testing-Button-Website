@@ -815,7 +815,8 @@
     try {
       const bizType = biz.type || 'window_cleaning';
       // Build the correct form endpoint URL
-      let formUrl = biz.web.replace(/\/+$/, '');
+      let formUrl = biz.web.trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(formUrl)) formUrl = 'https://' + formUrl;
       // If user gave the homepage, append the API endpoint
       if (!/\/api\//.test(formUrl)) {
         const slug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
