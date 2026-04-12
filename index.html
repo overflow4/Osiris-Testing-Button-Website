@@ -1064,6 +1064,7 @@
         const web = await testWebForm(biz);
 
         if (stopRequested) break;
+        await resetTestData();
         setStatus(`[${biz.name}] Test 4/4: Email...`);
         const email = await testEmail(biz);
 
