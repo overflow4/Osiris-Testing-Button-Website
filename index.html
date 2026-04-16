@@ -321,8 +321,9 @@
   const FROM_VAPI_NUMBER = '+17169521258';
   const FROM_VAPI_NUMBER_ENC = '%2B17169521258';
   const FROM_OPENPHONE_ID = 'PNuat0xvca';
-  const TEST_PHONE = '+14246771112';
-  const TEST_PHONE_ENC = '%2B14246771112';
+  const TWILIO_TEST_PHONE = '+14246771145';
+  const TEST_PHONE = TWILIO_TEST_PHONE;
+  const TEST_PHONE_ENC = encodeURIComponent(TWILIO_TEST_PHONE);
   const NOTIFY_PHONE = '+14157204580';
 
   // Cache of OpenPhone number -> phoneNumberId
@@ -340,6 +341,25 @@
       (data.data || []).forEach(p => { opPhoneIdCache[normalizePhone(p.number)] = p.id; });
     } catch (e) {}
     return opPhoneIdCache[norm] || null;
+  }
+
+  // ── Twilio Helpers ──
+  async function twilioSend(to, body) {
+    const r = await fetch('/api/twilio-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, body })
+    });
+    return r.json();
+  }
+
+  async function twilioGetMessages(from, since, limit) {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (since) params.set('since', since);
+    if (limit) params.set('limit', String(limit));
+    const r = await fetch('/api/twilio-messages?' + params.toString());
+    return r.json();
   }
 
   let businesses = [];
@@ -573,11 +593,11 @@
 
     const voicePrompts = {
       window_cleaning: {
-        system: "You are Alex Thompson, a homeowner calling to get a quote on window cleaning. You want EXTERIOR ONLY windows cleaned. About 2500 square feet. No French panes. Address: 742 Evergreen Terrace, Naperville, IL 60540. Preferred time: Saturday at 10am. Found via Google search. Your phone number is 424-677-1112 and you can receive texts there. Be natural, keep answers short. Accept whatever time they offer closest to Saturday morning.\n\nIMPORTANT RULES:\n- If they ask for your phone number or where to text you, say \"4 2 4, 6 7 7, 1 1 1 2\"\n- If they say they will text you, say \"Yeah you can text me at 4 2 4, 6 7 7, 1 1 1 2\"\n- If they ask for the best number to reach you, say \"4 2 4, 6 7 7, 1 1 1 2\"\n- When they confirm and say goodbye, say 'Sounds great, thanks!' and nothing else",
+        system: "You are Alex Thompson, a homeowner calling to get a quote on window cleaning. You want EXTERIOR ONLY windows cleaned. About 2500 square feet. No French panes. Address: 742 Evergreen Terrace, Naperville, IL 60540. Preferred time: Saturday at 10am. Found via Google search. Your phone number is 424-677-1145 and you can receive texts there. Be natural, keep answers short. Accept whatever time they offer closest to Saturday morning.\n\nIMPORTANT RULES:\n- If they ask for your phone number or where to text you, say \"4 2 4, 6 7 7, 1 1 4 5\"\n- If they say they will text you, say \"Yeah you can text me at 4 2 4, 6 7 7, 1 1 4 5\"\n- If they ask for the best number to reach you, say \"4 2 4, 6 7 7, 1 1 4 5\"\n- When they confirm and say goodbye, say 'Sounds great, thanks!' and nothing else",
         firstMessage: "Hi! I'm calling about getting my windows cleaned - do you guys do free estimates?"
       },
       house_cleaning: {
-        system: "You are Alex Thompson, a homeowner calling about house cleaning services. You want a STANDARD CLEANING. Your home is 3 bedrooms, 2 bathrooms. Address: 742 Evergreen Terrace, Naperville, IL 60540. You do NOT need a deep clean or move-in/move-out clean. Your phone number is 424-677-1112 and you can receive texts there.\n\nIMPORTANT RULES:\n- When the bot asks about bedrooms and bathrooms, say \"3 bedrooms and 2 bathrooms\"\n- If asked about service type, say \"just a standard cleaning\"\n- If asked your name, say \"Alex Thompson\"\n- If asked about frequency, say \"just a one-time cleaning for now\"\n- If they ask for your phone number or where to text you, say \"4 2 4, 6 7 7, 1 1 1 2\"\n- If they say they will text you a quote or pricing, say \"Sounds good, you can text me at 4 2 4, 6 7 7, 1 1 1 2\"\n- If they ask for the best number to reach you, say \"4 2 4, 6 7 7, 1 1 1 2\"\n- Keep answers SHORT — 1-2 sentences max\n- Be natural and conversational, like a real person\n- When they say goodbye or the conversation wraps up, say \"Thanks so much!\" and nothing else\n- Do NOT ask about price — wait for them to bring it up or text it",
+        system: "You are Alex Thompson, a homeowner calling about house cleaning services. You want a STANDARD CLEANING. Your home is 3 bedrooms, 2 bathrooms. Address: 742 Evergreen Terrace, Naperville, IL 60540. You do NOT need a deep clean or move-in/move-out clean. Your phone number is 424-677-1145 and you can receive texts there.\n\nIMPORTANT RULES:\n- When the bot asks about bedrooms and bathrooms, say \"3 bedrooms and 2 bathrooms\"\n- If asked about service type, say \"just a standard cleaning\"\n- If asked your name, say \"Alex Thompson\"\n- If asked about frequency, say \"just a one-time cleaning for now\"\n- If they ask for your phone number or where to text you, say \"4 2 4, 6 7 7, 1 1 4 5\"\n- If they say they will text you a quote or pricing, say \"Sounds good, you can text me at 4 2 4, 6 7 7, 1 1 4 5\"\n- If they ask for the best number to reach you, say \"4 2 4, 6 7 7, 1 1 4 5\"\n- Keep answers SHORT — 1-2 sentences max\n- Be natural and conversational, like a real person\n- When they say goodbye or the conversation wraps up, say \"Thanks so much!\" and nothing else\n- Do NOT ask about price — wait for them to bring it up or text it",
         firstMessage: "Hi! I'm looking to get my house cleaned — do you guys do that?"
       }
     };
@@ -612,7 +632,7 @@
       if(data.recordingUrl){document.getElementById('audioRow').style.display='block';document.getElementById('audioPlayer').src=data.recordingUrl;}
 
       addPhase('tVoice','DB Verification');addSys('tVoice','Waiting 30s for webhooks...');await sleep(30000);
-      // Check under both test phone (+14246771112, verbally given) and VAPI FROM number (+17169521258, caller ID)
+      // Check under both test phone (Twilio number, verbally given) and VAPI FROM number (+17169521258, caller ID)
       const cust1=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
       const cust2=await supaFetch('customers',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id`);
       const cust=[...cust1,...cust2];
@@ -625,35 +645,30 @@
       const allCalls=[...dbCalls,...dbCalls2];
       const dbN=cust.length+leads.length+allCalls.length;
       document.getElementById('mVoiceDb').textContent=dbN;
-      addSys('tVoice',`Customers: ${cust.length} (checked +14246771112 & +17169521258)`,cust.length>0?'sys-ok':'sys-warn');
+      addSys('tVoice',`Customers: ${cust.length} (checked ${TWILIO_TEST_PHONE} & ${FROM_VAPI_NUMBER})`,cust.length>0?'sys-ok':'sys-warn');
       addSys('tVoice',`Leads: ${leads.length}, Calls: ${allCalls.length}`,leads.length+allCalls.length>0?'sys-ok':'sys-warn');
 
-      // Check for post-call SMS (e.g. quote link texted after call)
+      // Check for post-call SMS (e.g. quote link texted after call) via Twilio
       let postCallSms = false;
       if (biz.sms) {
         addPhase('tVoice','Post-Call SMS Check');
-        addSys('tVoice','Checking for follow-up text message...');
+        addSys('tVoice','Checking for follow-up text message via Twilio...');
         const smsNum = normalizePhone(biz.sms);
-        const smsPhoneId = await resolveOpenPhoneId(smsNum);
-        if (smsPhoneId) {
-          // Check Cold Caller inbox for messages from the business number
-          const callStartTime = data.startedAt;
-          for (let poll = 0; poll < 4; poll++) {
-            await sleep(10000);
-            const mr = await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNuat0xvca&participants=${encodeURIComponent(smsNum)}&maxResults=5`,{headers:{'Authorization':OPENPHONE_KEY}});
-            const md = await mr.json();
-            const postMsgs = (md.data||[]).filter(m => m.direction === 'incoming' && m.createdAt > callStartTime);
-            if (postMsgs.length > 0) {
-              postCallSms = true;
-              addPhase('tVoice','Post-Call Text');
-              postMsgs.reverse().forEach(m => {
-                addBubble('tVoice', m.text || m.content || '', false, new Date(m.createdAt).toLocaleTimeString('en-US',{hour12:false}));
-              });
-              break;
-            }
+        const callStartTime = data.startedAt;
+        for (let poll = 0; poll < 4; poll++) {
+          await sleep(10000);
+          const md = await twilioGetMessages(smsNum, callStartTime, 5);
+          const postMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(callStartTime));
+          if (postMsgs.length > 0) {
+            postCallSms = true;
+            addPhase('tVoice','Post-Call Text');
+            postMsgs.reverse().forEach(m => {
+              addBubble('tVoice', m.body || '', false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
+            });
+            break;
           }
-          if (!postCallSms) addSys('tVoice','No follow-up SMS received after call.','sys-warn');
         }
+        if (!postCallSms) addSys('tVoice','No follow-up SMS received after call.','sys-warn');
       }
 
       const tx = data.transcript || '';
@@ -730,30 +745,26 @@
 
     let msgCount=0, used=new Set(), booked=false, botResponded=false, quoteLinkReceived=false, bedBathAsked=false, sqftAsked=false;
     try {
-      // Normalize + resolve the OpenPhone phone number ID for the business's SMS number
       const smsNumber = normalizePhone(biz.sms);
-      const bizPhoneId = await resolveOpenPhoneId(smsNumber);
-      if (!bizPhoneId) { addSys('tSms','Could not resolve OpenPhone ID for '+smsNumber,'sys-err'); setBadge('badgeSms','fail','ERROR'); return 'FAIL'; }
-      addSys('tSms',`Resolved ${smsNumber} -> ${bizPhoneId}`);
+      addSys('tSms',`Sending via Twilio: ${TWILIO_TEST_PHONE} → ${smsNumber}`);
 
       // Record start time to filter out old messages
       const testStartTime = new Date().toISOString();
 
-      await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[smsNumber],content:opener})});
+      const sendResult = await twilioSend(smsNumber, opener);
+      if (!sendResult.sent) { addSys('tSms','Failed to send: '+sendResult.error,'sys-err'); setBadge('badgeSms','fail','ERROR'); return 'FAIL'; }
       addBubble('tSms',opener,true,ts());msgCount++;
 
-      let lastId=null,noReply=0;
+      let lastSid=null,noReply=0;
       for(let round=0;round<20;round++){
         await sleep(15000);
-        const mRes=await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=${bizPhoneId}&participants=${TEST_PHONE_ENC}&maxResults=15`,{headers:{'Authorization':OPENPHONE_KEY}});
-        const mData=await mRes.json();
-        // Filter: only incoming messages created AFTER our test started
-        // On business phone: outgoing = bot replies TO customer, incoming = customer messages
-        const inbound=(mData.data||[]).filter(m=>m.direction==='outgoing' && m.createdAt > testStartTime);
-        if(!inbound.length||(lastId&&inbound[0].id===lastId)){noReply++;if(noReply>=8){addSys('tSms','No reply after 2 minutes.','sys-err');break;}continue;}
-        noReply=0;botResponded=true;const msg=inbound[0];lastId=msg.id;
-        const body=msg.text||msg.content||'';
-        addBubble('tSms',body,false,new Date(msg.createdAt).toLocaleTimeString('en-US',{hour12:false}));msgCount++;
+        // Poll Twilio for inbound messages FROM the business number TO our Twilio number
+        const mData = await twilioGetMessages(smsNumber, testStartTime, 15);
+        const inbound = (mData.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(testStartTime));
+        if(!inbound.length||(lastSid&&inbound[0].sid===lastSid)){noReply++;if(noReply>=8){addSys('tSms','No reply after 2 minutes.','sys-err');break;}continue;}
+        noReply=0;botResponded=true;const msg=inbound[0];lastSid=msg.sid;
+        const body=msg.body||'';
+        addBubble('tSms',body,false,new Date(msg.dateSent).toLocaleTimeString('en-US',{hour12:false}));msgCount++;
 
         // Track what bot asked about
         if(/bed|bath/i.test(body)) bedBathAsked = true;
@@ -773,7 +784,7 @@
         if(bizType === 'window_cleaning' && /confirm|booked|all set|see you|appointment.*set/i.test(body)){booked=true;addSys('tSms','Booking confirmed!','sys-ok');break;}
 
         let replied=false;
-        for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await fetch(`${OPENPHONE_BASE}/messages`,{method:'POST',headers:{'Authorization':OPENPHONE_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:FROM_OPENPHONE_ID,to:[smsNumber],content:replies[i].reply})});addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
+        for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await twilioSend(smsNumber,replies[i].reply);addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
       }
       document.getElementById('mSmsMsgs').textContent=msgCount;
       addPhase('tSms','DB Verification');await sleep(5000);
@@ -825,13 +836,13 @@
       addSys('tWeb','Submitting form to '+formUrl);
       // Use correct field names matching the actual form (service_type, not service)
       const formData = bizType === 'house_cleaning' ? {
-        name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
+        name:'Alex Thompson',phone:'4246771145',email:'alex.thompson.test@gmail.com',
         address:'742 Evergreen Terrace, Naperville, IL 60540',
         service_type:'Standard cleaning',
         message:'Looking for a standard cleaning for my 3 bed 2 bath home. One-time cleaning.',
         source:'Google search'
       } : {
-        name:'Alex Thompson',phone:'4246771112',email:'alex.thompson.test@gmail.com',
+        name:'Alex Thompson',phone:'4246771145',email:'alex.thompson.test@gmail.com',
         address:'742 Evergreen Terrace, Naperville, IL 60540',
         service_type:'Exterior window cleaning',
         message:'Interested in exterior window cleaning for my 2500 sqft home. No French panes. Preferred time: Saturday at 10am.',
@@ -857,37 +868,31 @@
       const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
       document.getElementById('mWebDb').textContent=cust.length+leads.length;
 
-      // Check for follow-up SMS with quote/invoice link
+      // Check for follow-up SMS with quote/invoice link via Twilio
       let postFormSms = false;
       let smsContent = '';
       let invoiceLink = false;
       if (biz.sms) {
         addPhase('tWeb','Post-Form SMS Check');
-        addSys('tWeb','Checking for follow-up SMS with quote/invoice...');
+        addSys('tWeb','Checking for follow-up SMS with quote/invoice via Twilio...');
         const smsNum = normalizePhone(biz.sms);
-        const smsPhoneId = await resolveOpenPhoneId(smsNum);
-        if (smsPhoneId) {
-          for (let poll = 0; poll < 4; poll++) {
-            await sleep(10000);
-            const mr = await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNuat0xvca&participants=${encodeURIComponent(smsNum)}&maxResults=10`,{headers:{'Authorization':OPENPHONE_KEY}});
-            const md = await mr.json();
-            const recentMsgs = (md.data||[]).filter(m => m.direction === 'incoming' && new Date(m.createdAt) > new Date(Date.now() - 120000));
-            if (recentMsgs.length > 0) {
-              postFormSms = true;
-              addPhase('tWeb','Follow-up SMS');
-              recentMsgs.reverse().forEach(m => {
-                const txt = m.text || m.content || '';
-                smsContent += txt + ' ';
-                addBubble('tWeb', txt, false, new Date(m.createdAt).toLocaleTimeString('en-US',{hour12:false}));
-              });
-              invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
-              break;
-            }
+        for (let poll = 0; poll < 4; poll++) {
+          await sleep(10000);
+          const md = await twilioGetMessages(smsNum, null, 10);
+          const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
+          if (recentMsgs.length > 0) {
+            postFormSms = true;
+            addPhase('tWeb','Follow-up SMS');
+            recentMsgs.reverse().forEach(m => {
+              const txt = m.body || '';
+              smsContent += txt + ' ';
+              addBubble('tWeb', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
+            });
+            invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
+            break;
           }
-          if (!postFormSms) addSys('tWeb','No follow-up SMS received after form submission.','sys-warn');
-        } else {
-          addSys('tWeb','Could not resolve OpenPhone ID — skipping SMS check.','sys-warn');
         }
+        if (!postFormSms) addSys('tWeb','No follow-up SMS received after form submission.','sys-warn');
       } else {
         addSys('tWeb','No SMS number configured — skipping SMS check.','sys-warn');
       }
@@ -919,7 +924,7 @@
     try {
       const emailBody = `<p>Hi, I'm interested in getting a cleaning quote.</p>
 <p><strong>Name:</strong> Alex Thompson<br>
-<strong>Phone:</strong> (424) 677-1112<br>
+<strong>Phone:</strong> (424) 677-1145<br>
 <strong>Address:</strong> 742 Evergreen Terrace, Naperville, IL 60540<br>
 <strong>Service:</strong> ${(biz.type||'window_cleaning')==='house_cleaning'?'Standard house cleaning (3 bed / 2 bath)':'Exterior window cleaning (2500 sqft)'}<br>
 <strong>Preferred time:</strong> Saturday at 10am</p>
@@ -955,37 +960,31 @@
       const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
       document.getElementById('mEmailDb').textContent=cust.length+leads.length;
 
-      // Check for follow-up SMS with quote/invoice
+      // Check for follow-up SMS with quote/invoice via Twilio
       let postEmailSms = false;
       let smsContent = '';
       let invoiceLink = false;
       if (biz.sms) {
         addPhase('tEmail','Post-Email SMS Check');
-        addSys('tEmail','Checking for follow-up SMS with quote/invoice...');
+        addSys('tEmail','Checking for follow-up SMS with quote/invoice via Twilio...');
         const smsNum = normalizePhone(biz.sms);
-        const smsPhoneId = await resolveOpenPhoneId(smsNum);
-        if (smsPhoneId) {
-          for (let poll = 0; poll < 4; poll++) {
-            await sleep(10000);
-            const mr = await fetch(`${OPENPHONE_BASE}/messages?phoneNumberId=PNuat0xvca&participants=${encodeURIComponent(smsNum)}&maxResults=10`,{headers:{'Authorization':OPENPHONE_KEY}});
-            const md = await mr.json();
-            const recentMsgs = (md.data||[]).filter(m => m.direction === 'incoming' && new Date(m.createdAt) > new Date(Date.now() - 120000));
-            if (recentMsgs.length > 0) {
-              postEmailSms = true;
-              addPhase('tEmail','Follow-up SMS');
-              recentMsgs.reverse().forEach(m => {
-                const txt = m.text || m.content || '';
-                smsContent += txt + ' ';
-                addBubble('tEmail', txt, false, new Date(m.createdAt).toLocaleTimeString('en-US',{hour12:false}));
-              });
-              invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
-              break;
-            }
+        for (let poll = 0; poll < 4; poll++) {
+          await sleep(10000);
+          const md = await twilioGetMessages(smsNum, null, 10);
+          const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
+          if (recentMsgs.length > 0) {
+            postEmailSms = true;
+            addPhase('tEmail','Follow-up SMS');
+            recentMsgs.reverse().forEach(m => {
+              const txt = m.body || '';
+              smsContent += txt + ' ';
+              addBubble('tEmail', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
+            });
+            invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
+            break;
           }
-          if (!postEmailSms) addSys('tEmail','No follow-up SMS received after email.','sys-warn');
-        } else {
-          addSys('tEmail','Could not resolve OpenPhone ID — skipping SMS check.','sys-warn');
         }
+        if (!postEmailSms) addSys('tEmail','No follow-up SMS received after email.','sys-warn');
       } else {
         addSys('tEmail','No SMS number configured — skipping SMS check.','sys-warn');
       }
