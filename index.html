@@ -362,6 +362,79 @@
     return r.json();
   }
 
+  // ── Invoice Helpers ──
+  function extractInvoiceUrl(text) {
+    // Look for cleanmachine.live links first, then any http(s) URL
+    const cmMatch = text.match(/https?:\/\/[^\s]*cleanmachine\.live[^\s)"]*/i);
+    if (cmMatch) return cmMatch[0];
+    const urlMatch = text.match(/https?:\/\/[^\s)"]+/i);
+    return urlMatch ? urlMatch[0] : null;
+  }
+
+  async function fetchInvoice(url) {
+    const r = await fetch('/api/fetch-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    return r.json();
+  }
+
+  async function analyzeInvoice(conversation, invoiceHtml, invoiceUrl, testType, businessName) {
+    const r = await fetch('/api/analyze-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation, invoiceHtml, invoiceUrl, testType, businessName })
+    });
+    return r.json();
+  }
+
+  // Run full invoice inspection: extract URL -> fetch page -> LLM analysis
+  // Returns { found, url, analysis } or { found: false }
+  async function inspectInvoice(allText, conversation, testType, businessName, panelId) {
+    const url = extractInvoiceUrl(allText);
+    if (!url) {
+      addSys(panelId, 'No invoice/quote URL found in messages.', 'sys-warn');
+      return { found: false };
+    }
+
+    addPhase(panelId, 'Invoice Inspection');
+    addSys(panelId, `Found invoice URL: ${url}`);
+    addSys(panelId, 'Fetching invoice page...');
+
+    const page = await fetchInvoice(url);
+    if (!page.html || page.status !== 200) {
+      addSys(panelId, `Failed to load invoice: HTTP ${page.status} — ${page.error || ''}`, 'sys-err');
+      return { found: true, url, analysis: null };
+    }
+    addSys(panelId, `Invoice loaded (${page.html.length} chars, ${page.elapsed}ms)`);
+
+    addSys(panelId, 'Analyzing invoice with AI...');
+    const analysis = await analyzeInvoice(conversation, page.html, url, testType, businessName);
+
+    if (analysis.error) {
+      addSys(panelId, `Analysis error: ${analysis.error}`, 'sys-err');
+      return { found: true, url, analysis: null };
+    }
+
+    // Display results
+    addPhase(panelId, `Invoice Analysis — ${analysis.score}`);
+    const checks = [
+      { t: 'Price displayed', s: analysis.priceFound?.pass, d: analysis.priceFound?.detail },
+      { t: 'Price consistent with conversation', s: analysis.priceConsistent?.pass, d: analysis.priceConsistent?.detail },
+      { t: 'Customer info correct', s: analysis.customerInfo?.pass, d: analysis.customerInfo?.detail },
+      { t: 'Service details match', s: analysis.serviceDetails?.pass, d: analysis.serviceDetails?.detail },
+      { t: 'No visual glitches', s: analysis.noGlitches?.pass, d: analysis.noGlitches?.detail },
+      { t: 'Booking/payment flow present', s: analysis.bookingFlow?.pass, d: analysis.bookingFlow?.detail },
+    ];
+    checks.forEach(c => {
+      addSys(panelId, `${c.s ? '✓' : '✗'} ${c.t}: ${c.d || ''}`, c.s ? 'sys-ok' : 'sys-err');
+    });
+    addSys(panelId, `Summary: ${analysis.summary}`);
+
+    return { found: true, url, analysis };
+  }
+
   let businesses = [];
   let running = false;
   let stopRequested = false;
@@ -631,39 +704,25 @@
       if(data.transcript){addPhase('tVoice','Transcript');data.transcript.split('\n').filter(l=>l.trim()).forEach(line=>{const isAI=line.startsWith('AI:');const isUser=line.startsWith('User:');if(isAI||isUser)addBubble('tVoice',line.replace(/^(AI|User):\s*/,''),isAI);});}
       if(data.recordingUrl){document.getElementById('audioRow').style.display='block';document.getElementById('audioPlayer').src=data.recordingUrl;}
 
-      addPhase('tVoice','DB Verification');addSys('tVoice','Waiting 30s for webhooks...');await sleep(30000);
-      // Check under both test phone (Twilio number, verbally given) and VAPI FROM number (+17169521258, caller ID)
-      const cust1=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const cust2=await supaFetch('customers',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id`);
-      const cust=[...cust1,...cust2];
-      const leads1=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const leads2=await supaFetch('leads',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id`);
-      const leads=[...leads1,...leads2];
-      const dbCalls=await supaFetch('calls',`vapi_call_id=eq.${call.id}&select=id`);
-      // Also check calls by phone number if not found by vapi_call_id
-      const dbCalls2=dbCalls.length?[]:await supaFetch('calls',`phone_number=eq.${FROM_VAPI_NUMBER_ENC}&select=id&order=created_at.desc&limit=1`);
-      const allCalls=[...dbCalls,...dbCalls2];
-      const dbN=cust.length+leads.length+allCalls.length;
-      document.getElementById('mVoiceDb').textContent=dbN;
-      addSys('tVoice',`Customers: ${cust.length} (checked ${TWILIO_TEST_PHONE} & ${FROM_VAPI_NUMBER})`,cust.length>0?'sys-ok':'sys-warn');
-      addSys('tVoice',`Leads: ${leads.length}, Calls: ${allCalls.length}`,leads.length+allCalls.length>0?'sys-ok':'sys-warn');
-
-      // Check for post-call SMS (e.g. quote link texted after call) via Twilio
+      // Wait for post-call SMS with invoice link via Twilio
       let postCallSms = false;
+      let postCallSmsText = '';
+      addPhase('tVoice','Post-Call SMS Check');
+      addSys('tVoice','Waiting for follow-up SMS with invoice link...');
       if (biz.sms) {
-        addPhase('tVoice','Post-Call SMS Check');
-        addSys('tVoice','Checking for follow-up text message via Twilio...');
         const smsNum = normalizePhone(biz.sms);
         const callStartTime = data.startedAt;
-        for (let poll = 0; poll < 4; poll++) {
+        for (let poll = 0; poll < 6; poll++) {
           await sleep(10000);
-          const md = await twilioGetMessages(smsNum, callStartTime, 5);
+          const md = await twilioGetMessages(smsNum, callStartTime, 10);
           const postMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(callStartTime));
           if (postMsgs.length > 0) {
             postCallSms = true;
             addPhase('tVoice','Post-Call Text');
             postMsgs.reverse().forEach(m => {
-              addBubble('tVoice', m.body || '', false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
+              const txt = m.body || '';
+              postCallSmsText += txt + ' ';
+              addBubble('tVoice', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
             });
             break;
           }
@@ -672,35 +731,25 @@
       }
 
       const tx = data.transcript || '';
-      let checks;
-      if (bizType === 'house_cleaning') {
-        checks=[
-          {t:'Call lasted >30s',s:dur>30},
-          {t:'Transcript captured',s:!!tx},
-          {t:'Bot asked about bed/bath',s:/bed|bath/i.test(tx)},
-          {t:'Quote/price mentioned or texted',s:/quote|price|\$|text/i.test(tx)},
-          {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
-          {t:'Post-call SMS with quote received',s:postCallSms},
-          {t:'Customer record created',s:cust.length>0},
-          {t:'Lead created',s:leads.length>0},
-          {t:'Call logged in DB',s:allCalls.length>0}
-        ];
-      } else {
-        checks=[
-          {t:'Call lasted >30s',s:dur>30},
-          {t:'Transcript captured',s:!!tx},
-          {t:'No price quoted',s:!/\$\d/.test(tx)},
-          {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
-          {t:'Customer record created',s:cust.length>0},
-          {t:'Lead created',s:leads.length>0},
-          {t:'Call logged in DB',s:allCalls.length>0}
-        ];
-      }
+      // Build conversation context for LLM analysis
+      const conversationLog = `## Voice Call Transcript\n${tx}\n\n## Post-Call SMS\n${postCallSmsText || 'None received'}`;
+
+      // Invoice inspection
+      const invoice = await inspectInvoice(postCallSmsText, conversationLog, 'voice_call', biz.name, 'tVoice');
+
+      const checks=[
+        {t:'Call lasted >30s',s:dur>30},
+        {t:'Transcript captured',s:!!tx},
+        {t:'Natural ending',s:['customer-ended-call','assistant-ended-call'].includes(data.endedReason)},
+        {t:'Post-call SMS received',s:postCallSms},
+        {t:'Invoice/quote URL found',s:invoice.found},
+        {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
+      ];
       showChecks('chkVoice',checks);
       const p=checks.filter(c=>c.s).length;
-      const threshold = Math.ceil(checks.length * 0.7);
-      setBadge('badgeVoice',p>=threshold?'pass':'fail',`${p}/${checks.length}`);
-      return p>=threshold?'PASS':'FAIL';
+      document.getElementById('mVoiceDb').textContent=invoice.analysis?.score||'--';
+      setBadge('badgeVoice',p>=5?'pass':'fail',`${p}/${checks.length}`);
+      return p>=5?'PASS':'FAIL';
     } catch(e){if(e.message==='__STOPPED__')throw e;addSys('tVoice','Error: '+e.message,'sys-err');setBadge('badgeVoice','fail','ERROR');return 'FAIL';}
   }
 
@@ -787,11 +836,21 @@
         for(let i=0;i<replies.length;i++){if(!used.has(i)&&replies[i].match.test(body)){await sleep(2000);await twilioSend(smsNumber,replies[i].reply);addBubble('tSms',replies[i].reply,true,ts());msgCount++;used.add(i);replied=true;break;}}
       }
       document.getElementById('mSmsMsgs').textContent=msgCount;
-      addPhase('tSms','DB Verification');await sleep(5000);
-      const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      document.getElementById('mSmsDb').textContent=cust.length+leads.length;
-      addSys('tSms',`Customers: ${cust.length}, Leads: ${leads.length}`,cust.length?'sys-ok':'sys-warn');
+
+      // Collect all conversation text from transcript panel for URL extraction + LLM
+      const allBubbles = document.querySelectorAll('#tSms .bbubble');
+      let conversationLog = '## SMS Conversation\n';
+      let allBotText = '';
+      allBubbles.forEach(b => {
+        const row = b.closest('.brow');
+        const isBot = row?.classList.contains('out');
+        const text = b.textContent || '';
+        conversationLog += `${isBot ? 'Bot' : 'Customer'}: ${text}\n`;
+        if (isBot) allBotText += text + ' ';
+      });
+
+      // Invoice inspection
+      const invoice = await inspectInvoice(allBotText, conversationLog, 'sms', biz.name, 'tSms');
 
       let checks;
       if (bizType === 'house_cleaning') {
@@ -800,19 +859,20 @@
           {t:'Bot asked about bed/bath count',s:bedBathAsked},
           {t:'Quote link received',s:quoteLinkReceived},
           {t:'Bot did NOT ask for square footage',s:!sqftAsked},
-          {t:'Customer record created',s:cust.length>0},
-          {t:'Lead created',s:leads.length>0},
+          {t:'Invoice/quote URL found',s:invoice.found},
+          {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
         ];
       } else {
         checks=[
           {t:'Bot responded',s:botResponded},
           {t:'Booking completed',s:booked},
-          {t:'Customer record created',s:cust.length>0},
-          {t:'Lead created',s:leads.length>0},
+          {t:'Invoice/quote URL found',s:invoice.found},
+          {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
         ];
       }
       showChecks('chkSms',checks);
       const p=checks.filter(c=>c.s).length;
+      document.getElementById('mSmsDb').textContent=invoice.analysis?.score||'--';
       const threshold = Math.ceil(checks.length * 0.7);
       setBadge('badgeSms',p>=threshold?'pass':'fail',`${p}/${checks.length}`);
       return p>=threshold?'PASS':'FAIL';
@@ -860,23 +920,14 @@
       document.getElementById('mWebStatus').textContent=status||'ERR';
       addSys('tWeb',`Response: HTTP ${status} ${proxyData.statusText||''}`,status&&status<300?'sys-ok':'sys-err');
       if(proxyData.body)addSys('tWeb','Body: '+proxyData.body.slice(0,200));
-      // Wait for webhooks/processing
-      addPhase('tWeb','DB Verification');
-      addSys('tWeb','Waiting 15s for webhooks...');
-      await sleep(15000);
-      const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      document.getElementById('mWebDb').textContent=cust.length+leads.length;
-
-      // Check for follow-up SMS with quote/invoice link via Twilio
+      // Wait for processing, then check for follow-up SMS with invoice
       let postFormSms = false;
       let smsContent = '';
-      let invoiceLink = false;
       if (biz.sms) {
         addPhase('tWeb','Post-Form SMS Check');
-        addSys('tWeb','Checking for follow-up SMS with quote/invoice via Twilio...');
+        addSys('tWeb','Waiting for follow-up SMS with invoice link...');
         const smsNum = normalizePhone(biz.sms);
-        for (let poll = 0; poll < 4; poll++) {
+        for (let poll = 0; poll < 6; poll++) {
           await sleep(10000);
           const md = await twilioGetMessages(smsNum, null, 10);
           const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
@@ -888,7 +939,6 @@
               smsContent += txt + ' ';
               addBubble('tWeb', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
             });
-            invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
             break;
           }
         }
@@ -897,17 +947,23 @@
         addSys('tWeb','No SMS number configured — skipping SMS check.','sys-warn');
       }
 
+      // Build conversation context
+      const conversationLog = `## Website Form Submission\n${Object.entries(formData).map(([k,v])=>`${k}: ${v}`).join('\n')}\n\nHTTP Response: ${status} ${proxyData.statusText||''}\n\n## Follow-up SMS\n${smsContent || 'None received'}`;
+
+      // Invoice inspection
+      const invoice = await inspectInvoice(smsContent, conversationLog, 'website_form', biz.name, 'tWeb');
+
       const checks=[
         {t:'Form submitted successfully',s:status>=200&&status<300},
-        {t:'Customer record created',s:cust.length>0},
-        {t:'Lead created',s:leads.length>0},
         {t:'Follow-up SMS received',s:postFormSms},
-        {t:'SMS contains quote/invoice link',s:invoiceLink},
+        {t:'Invoice/quote URL found',s:invoice.found},
+        {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
       ];
       showChecks('chkWeb',checks);
       const p=checks.filter(c=>c.s).length;
-      setBadge('badgeWeb',p>=4?'pass':'fail',`${p}/${checks.length}`);
-      return p>=4?'PASS':'FAIL';
+      document.getElementById('mWebDb').textContent=invoice.analysis?.score||'--';
+      setBadge('badgeWeb',p>=3?'pass':'fail',`${p}/${checks.length}`);
+      return p>=3?'PASS':'FAIL';
     }catch(e){
       if(e.message==='__STOPPED__')throw e;
       addSys('tWeb','Error: '+e.message,'sys-err');
@@ -952,23 +1008,14 @@
       document.getElementById('mEmailStatus').textContent = 'Sent';
       addSys('tEmail', `Email sent via ${data.provider}`, 'sys-ok');
 
-      // Wait for processing then check DB
-      addPhase('tEmail','DB Verification');
-      addSys('tEmail','Waiting 15s for webhooks...');
-      await sleep(15000);
-      const cust=await supaFetch('customers',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      const leads=await supaFetch('leads',`phone_number=eq.${TEST_PHONE_ENC}&select=id`);
-      document.getElementById('mEmailDb').textContent=cust.length+leads.length;
-
-      // Check for follow-up SMS with quote/invoice via Twilio
+      // Wait for processing, then check for follow-up SMS with invoice
       let postEmailSms = false;
       let smsContent = '';
-      let invoiceLink = false;
       if (biz.sms) {
         addPhase('tEmail','Post-Email SMS Check');
-        addSys('tEmail','Checking for follow-up SMS with quote/invoice via Twilio...');
+        addSys('tEmail','Waiting for follow-up SMS with invoice link...');
         const smsNum = normalizePhone(biz.sms);
-        for (let poll = 0; poll < 4; poll++) {
+        for (let poll = 0; poll < 6; poll++) {
           await sleep(10000);
           const md = await twilioGetMessages(smsNum, null, 10);
           const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
@@ -980,7 +1027,6 @@
               smsContent += txt + ' ';
               addBubble('tEmail', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
             });
-            invoiceLink = /invoice|quote|book|pay|link|http|\.com/i.test(smsContent);
             break;
           }
         }
@@ -989,17 +1035,23 @@
         addSys('tEmail','No SMS number configured — skipping SMS check.','sys-warn');
       }
 
+      // Build conversation context
+      const conversationLog = `## Email Sent\nTo: ${biz.email}\nSubject: Cleaning Inquiry - Alex Thompson\n${emailBody}\n\n## Follow-up SMS\n${smsContent || 'None received'}`;
+
+      // Invoice inspection
+      const invoice = await inspectInvoice(smsContent, conversationLog, 'email', biz.name, 'tEmail');
+
       const checks=[
         {t:'Email sent successfully',s:true},
-        {t:'Customer record created',s:cust.length>0},
-        {t:'Lead created',s:leads.length>0},
         {t:'Follow-up SMS received',s:postEmailSms},
-        {t:'SMS contains quote/invoice link',s:invoiceLink},
+        {t:'Invoice/quote URL found',s:invoice.found},
+        {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
       ];
       showChecks('chkEmail',checks);
       const p=checks.filter(c=>c.s).length;
-      setBadge('badgeEmail',p>=4?'pass':'fail',`${p}/${checks.length}`);
-      return p>=4?'PASS':'FAIL';
+      document.getElementById('mEmailDb').textContent=invoice.analysis?.score||'--';
+      setBadge('badgeEmail',p>=3?'pass':'fail',`${p}/${checks.length}`);
+      return p>=3?'PASS':'FAIL';
     } catch(e) {
       if(e.message==='__STOPPED__')throw e;
       addSys('tEmail','Error: '+e.message,'sys-err');
