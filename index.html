@@ -1141,9 +1141,29 @@
     setStatus('Cleaning up test data...');
     await resetTestData();
 
-    // Send notification
+    // Generate AI summary from test logs
+    setStatus('Generating AI summary...');
+    const panelIds = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
+    const panelLogs = panelIds.map(id => {
+      const el = document.getElementById(id);
+      return el ? `## ${id}\n${el.innerText}` : '';
+    }).join('\n\n');
+
+    let aiSummary = '';
+    try {
+      const sumRes = await fetch('/api/summarize-tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ results: allResults, panelLogs })
+      });
+      const sumData = await sumRes.json();
+      aiSummary = sumData.summary || '';
+    } catch (e) { aiSummary = 'AI summary unavailable.'; }
+
+    // Send AI summary first, then short results
+    setStatus('Sending notifications...');
+    if (aiSummary) await sendNotification(aiSummary);
     const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}`).join(' | ');
-    setStatus('All tests complete. Sending notification...');
     await sendNotification(`Jack's Tester done. ${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 
