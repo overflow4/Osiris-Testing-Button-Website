@@ -1144,7 +1144,7 @@
     // Send notification
     const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}`).join(' | ');
     setStatus('All tests complete. Sending notification...');
-    await sendNotification(`Osiris E2E tests done. ${summary}`);
+    await sendNotification(`Jack's Tester done. ${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 
     finishRun();
