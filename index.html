@@ -888,10 +888,11 @@
       // Build the correct form endpoint URL
       let formUrl = biz.web.trim().replace(/\/+$/, '');
       if (!/^https?:\/\//i.test(formUrl)) formUrl = 'https://' + formUrl;
-      // If user gave the homepage, append the API endpoint
+      // If URL already contains /api/, use as-is; otherwise extract domain and append API path
       if (!/\/api\//.test(formUrl)) {
+        const urlObj = new URL(formUrl);
         const slug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
-        formUrl += `/api/webhooks/website/${slug}`;
+        formUrl = `${urlObj.origin}/api/webhooks/website/${slug}`;
       }
       addSys('tWeb','Submitting form to '+formUrl);
       // Use correct field names matching the actual form (service_type, not service)
