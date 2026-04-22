@@ -188,6 +188,7 @@
 
     .sys{text-align:center;font-size:0.68rem;color:var(--text-muted);margin:0.35rem 0;}
     .sys-ok{color:var(--green);font-weight:600;} .sys-err{color:var(--red);font-weight:600;} .sys-warn{color:var(--yellow);}
+    .test-link{color:#60a5fa;text-decoration:underline;text-underline-offset:2px;word-break:break-all;} .test-link:hover{color:#93c5fd;}
 
     .checks{padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;}
     .checks h4{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.35rem;}
@@ -473,12 +474,16 @@
   function setBadge(id, s, label) { const e = document.getElementById(id); e.className = 'badge badge-' + s; e.textContent = label; }
   function setStatus(msg) { document.getElementById('globalStatus').textContent = msg; }
 
+  function linkify(text) {
+    return text.replace(/(https?:\/\/[^\s)"<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="test-link">$1</a>');
+  }
+
   function addBubble(cid, text, out, time) {
     const a = document.getElementById(cid);
     if (a.querySelector('.transcript-empty')) a.innerHTML = '';
     const row = document.createElement('div'); row.className = 'brow' + (out ? ' out' : '');
     const av = document.createElement('div'); av.className = 'bavatar ' + (out ? 'av-cust' : 'av-bot'); av.textContent = out ? 'AT' : 'BZ';
-    const bb = document.createElement('div'); bb.className = 'bbubble'; bb.textContent = text;
+    const bb = document.createElement('div'); bb.className = 'bbubble'; bb.innerHTML = linkify(text.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
     if (time) { const t = document.createElement('div'); t.className = 'btime'; t.textContent = time; bb.appendChild(t); }
     row.append(av, bb); a.appendChild(row); a.scrollTop = a.scrollHeight;
   }
@@ -486,7 +491,7 @@
   function addSys(id, text, cls) {
     const a = document.getElementById(id);
     if (a.querySelector('.transcript-empty')) a.innerHTML = '';
-    const d = document.createElement('div'); d.className = 'sys ' + (cls || ''); d.textContent = text;
+    const d = document.createElement('div'); d.className = 'sys ' + (cls || ''); d.innerHTML = linkify(text.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
     a.appendChild(d); a.scrollTop = a.scrollHeight;
   }
 
