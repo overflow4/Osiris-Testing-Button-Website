@@ -1051,23 +1051,29 @@
   // ── Email Test ──
   async function testEmail(biz) {
     if (!biz.email) { setBadge('badgeEmail','fail','SKIPPED'); addSys('tEmail','No email configured.','sys-warn'); return 'SKIPPED'; }
-    setBadge('badgeEmail','running','TESTING');addPhase('tEmail','Email Test');
-    addSys('tEmail',`Sending test email to ${biz.email}...`);
-    try {
-      const emailBody = `<p>Hi, I'm interested in getting a cleaning quote.</p>
+    setBadge('badgeEmail','running','TESTING');addPhase('tEmail','Email Sent');
+    const emailSubject = 'Cleaning Inquiry - Alex Thompson';
+    const serviceDesc = (biz.type||'window_cleaning')==='house_cleaning'?'Standard house cleaning (3 bed / 2 bath)':'Exterior window cleaning (2500 sqft)';
+    const emailBody = `<p>Hi, I'm interested in getting a cleaning quote.</p>
 <p><strong>Name:</strong> Alex Thompson<br>
 <strong>Phone:</strong> (424) 677-1145<br>
 <strong>Address:</strong> 742 Evergreen Terrace, Naperville, IL 60540<br>
-<strong>Service:</strong> ${(biz.type||'window_cleaning')==='house_cleaning'?'Standard house cleaning (3 bed / 2 bath)':'Exterior window cleaning (2500 sqft)'}<br>
+<strong>Service:</strong> ${serviceDesc}<br>
 <strong>Preferred time:</strong> Saturday at 10am</p>
 <p>Found you through Google search. Thanks!</p>`;
 
+    // Show the email that was sent
+    addSys('tEmail', `To: ${biz.email}`);
+    addSys('tEmail', `Subject: ${emailSubject}`);
+    addBubble('tEmail', `Hi, I'm interested in getting a cleaning quote.\n\nName: Alex Thompson\nPhone: (424) 677-1145\nAddress: 742 Evergreen Terrace, Naperville, IL 60540\nService: ${serviceDesc}\nPreferred time: Saturday at 10am\n\nFound you through Google search. Thanks!`, true, ts());
+
+    try {
       const res = await fetch('/api/proxy-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: biz.email,
-          subject: 'Cleaning Inquiry - Alex Thompson',
+          subject: emailSubject,
           body: emailBody
         })
       });
