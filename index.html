@@ -1204,6 +1204,33 @@
     gallery.appendChild(item);
   }
 
+  const LOCAL_BROWSER_SERVER = 'http://localhost:3847';
+
+  async function browserFetch(endpoint, body) {
+    // Try local server first, fall back to Vercel API
+    try {
+      const localRes = await fetch(`${LOCAL_BROWSER_SERVER}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000),
+      });
+      const data = await localRes.json();
+      if (!data.error) return { data, source: 'local' };
+      console.log('Local browser server error, trying Vercel...', data.error);
+    } catch (e) {
+      console.log('Local browser server unavailable, trying Vercel...', e.message);
+    }
+    // Fall back to Vercel API
+    const apiMap = { '/invoice': '/api/browser-test-invoice', '/portal': '/api/browser-test-portal' };
+    const r = await fetch(apiMap[endpoint] || endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: await r.json(), source: 'cloud' };
+  }
+
   // ── Invoice Browser Test ──
   async function testInvoiceBrowser(biz, quoteUrl) {
     if (!quoteUrl) {
@@ -1216,12 +1243,8 @@
     addSys('tInvoiceBrowser', `Opening ${quoteUrl} in browser...`);
 
     try {
-      const r = await fetch('/api/browser-test-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quoteUrl, businessName: biz.name })
-      });
-      const data = await r.json();
+      const { data, source } = await browserFetch('/invoice', { quoteUrl, businessName: biz.name });
+      addSys('tInvoiceBrowser', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`);
 
       if (data.error) {
         addSys('tInvoiceBrowser', `Error: ${data.error}`, 'sys-err');
@@ -1265,17 +1288,13 @@
     addSys('tPortal', `Opening ${portalUrl} for ${biz.name}...`);
 
     try {
-      const r = await fetch('/api/browser-test-portal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          portalUrl,
-          tenantSlug: biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-          businessName: biz.name,
-          credentials: biz.portalCredentials || null,
-        })
+      const { data, source } = await browserFetch('/portal', {
+        portalUrl,
+        tenantSlug: biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        businessName: biz.name,
+        credentials: biz.portalCredentials || null,
       });
-      const data = await r.json();
+      addSys('tPortal', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`);
 
       if (data.error) {
         addSys('tPortal', `Error: ${data.error}`, 'sys-err');
