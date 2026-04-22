@@ -189,6 +189,8 @@
     .sys{text-align:center;font-size:0.68rem;color:var(--text-muted);margin:0.35rem 0;}
     .sys-ok{color:var(--green);font-weight:600;} .sys-err{color:var(--red);font-weight:600;} .sys-warn{color:var(--yellow);}
     .test-link{color:#60a5fa;text-decoration:underline;text-underline-offset:2px;word-break:break-all;} .test-link:hover{color:#93c5fd;}
+    .copy-btn{background:none;border:1px solid var(--border);color:var(--text-dim);font-size:0.65rem;padding:0.2rem 0.5rem;border-radius:6px;cursor:pointer;font-family:inherit;transition:all 0.15s;} .copy-btn:hover{border-color:var(--text-dim);color:var(--text);} .copy-btn.copied{border-color:var(--green);color:var(--green);}
+    .copy-all-bar{display:flex;justify-content:flex-end;padding:0 0 0.5rem 0;} .copy-all-bar .copy-btn{font-size:0.75rem;padding:0.3rem 0.8rem;}
 
     .checks{padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;}
     .checks h4{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.35rem;}
@@ -236,11 +238,12 @@
     <span class="progress" id="testingProgress"></span>
   </div>
 
+  <div class="copy-all-bar" id="copyAllBar" style="display:none;"><button class="copy-btn" onclick="copyAllPanels(this)">Copy All Panels</button></div>
   <div class="test-grid" id="testGrid" style="display:none;">
     <div class="test-panel" id="panelVoice">
       <div class="tpanel-header">
         <div class="left"><div class="icon-box icon-voice">&#9742;</div><h3>Voice Call</h3></div>
-        <span class="badge badge-idle" id="badgeVoice">IDLE</span>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelVoice',this)">Copy</button><span class="badge badge-idle" id="badgeVoice">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
         <div class="tpanel-metric"><div class="val" id="mVoiceDur">--</div><div class="lbl">Duration</div></div>
@@ -253,7 +256,7 @@
     <div class="test-panel" id="panelSms">
       <div class="tpanel-header">
         <div class="left"><div class="icon-box icon-sms">&#128172;</div><h3>SMS</h3></div>
-        <span class="badge badge-idle" id="badgeSms">IDLE</span>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelSms',this)">Copy</button><span class="badge badge-idle" id="badgeSms">IDLE</span></div>
       </div>
       <div id="smsRoute" style="padding:0.3rem 0.9rem;font-size:0.7rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace;display:none;"></div>
       <div class="tpanel-metrics">
@@ -266,7 +269,7 @@
     <div class="test-panel" id="panelWeb">
       <div class="tpanel-header">
         <div class="left"><div class="icon-box icon-web">&#127760;</div><h3>Website Form</h3></div>
-        <span class="badge badge-idle" id="badgeWeb">IDLE</span>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelWeb',this)">Copy</button><span class="badge badge-idle" id="badgeWeb">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
         <div class="tpanel-metric"><div class="val" id="mWebStatus">--</div><div class="lbl">HTTP Status</div></div>
@@ -278,7 +281,7 @@
     <div class="test-panel" id="panelEmail">
       <div class="tpanel-header">
         <div class="left"><div class="icon-box icon-email">&#9993;</div><h3>Email</h3></div>
-        <span class="badge badge-idle" id="badgeEmail">IDLE</span>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelEmail',this)">Copy</button><span class="badge badge-idle" id="badgeEmail">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
         <div class="tpanel-metric"><div class="val" id="mEmailStatus">--</div><div class="lbl">Status</div></div>
@@ -501,6 +504,73 @@
     const d = document.createElement('div'); d.className = 'phase-div';
     d.innerHTML = `<div class="pline"></div><div class="plabel">${label}</div><div class="pline"></div>`;
     a.appendChild(d);
+  }
+
+  // ── Copy Helpers ──
+  function formatPanelText(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return '';
+    const header = panel.querySelector('h3')?.textContent || '';
+    const badge = panel.querySelector('.badge')?.textContent || '';
+    const metrics = [...panel.querySelectorAll('.tpanel-metric')].map(m => {
+      const val = m.querySelector('.val')?.textContent || '';
+      const lbl = m.querySelector('.lbl')?.textContent || '';
+      return `${lbl}: ${val}`;
+    }).join(' | ');
+
+    const route = panel.querySelector('#smsRoute')?.textContent || '';
+    const transcript = panel.querySelector('.transcript');
+    let lines = [];
+    if (transcript) {
+      transcript.querySelectorAll('.phase-div, .brow, .sys, div[id="smsRoute"]').forEach(el => {
+        if (el.classList.contains('phase-div')) {
+          lines.push(`\n--- ${el.querySelector('.plabel')?.textContent || ''} ---`);
+        } else if (el.classList.contains('brow')) {
+          const isOut = el.classList.contains('out');
+          const text = el.querySelector('.bbubble')?.textContent?.replace(/\d{2}:\d{2}:\d{2}$/, '').trim() || '';
+          const time = el.querySelector('.btime')?.textContent || '';
+          lines.push(`${isOut ? 'CUSTOMER' : 'BOT'} [${time}]: ${text}`);
+        } else if (el.classList.contains('sys')) {
+          lines.push(el.textContent);
+        }
+      });
+    }
+
+    const checks = panel.querySelector('.checks');
+    let checkLines = [];
+    if (checks && checks.style.display !== 'none') {
+      checks.querySelectorAll('.chk').forEach(c => {
+        const passed = c.classList.contains('cp');
+        checkLines.push(`${passed ? 'PASS' : 'FAIL'}: ${c.textContent.replace(/^[✓✗]\s*/, '')}`);
+      });
+    }
+
+    let out = `== ${header} [${badge}] ==\n`;
+    out += `${metrics}\n`;
+    if (route) out += `Route: ${route}\n`;
+    out += lines.join('\n');
+    if (checkLines.length) out += `\n\nEvaluation:\n${checkLines.join('\n')}`;
+    return out;
+  }
+
+  function flashCopied(btn) {
+    btn.classList.add('copied');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.classList.remove('copied'); btn.textContent = btn.dataset.label || 'Copy'; }, 1500);
+  }
+
+  function copyPanel(panelId, btn) {
+    btn.dataset.label = btn.dataset.label || btn.textContent;
+    const text = `Test run: ${new Date().toISOString()}\n\n` + formatPanelText(panelId);
+    navigator.clipboard.writeText(text).then(() => flashCopied(btn));
+  }
+
+  function copyAllPanels(btn) {
+    btn.dataset.label = btn.dataset.label || btn.textContent;
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail'];
+    const text = `Jack's Tester — Full Test Report\nRun: ${new Date().toISOString()}\n\n` +
+      panels.map(p => formatPanelText(p)).join('\n\n');
+    navigator.clipboard.writeText(text).then(() => flashCopied(btn));
   }
 
   function showChecks(id, items) {
@@ -1089,6 +1159,7 @@
     btn.innerHTML = '<span class="spinner-sm"></span> Running Tests...';
     document.getElementById('stopBtn').style.display = 'inline-block';
     document.getElementById('testGrid').style.display = 'grid';
+    document.getElementById('copyAllBar').style.display = 'flex';
 
     const testLabel = document.getElementById('testingLabel');
     testLabel.style.display = 'block';
