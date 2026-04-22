@@ -21,6 +21,8 @@ Env vars must be set on the **`jaspergrenager-langs-projects`** Vercel dashboard
 - `ANTHROPIC_API_KEY`
 - `GMAIL_USER`
 - `GMAIL_APP_PASSWORD`
+- `BROWSERBASE_API_KEY` (for browser-based invoice and portal testing)
+- `BROWSERBASE_PROJECT_ID` (Browserbase project ID)
 
 If env vars need updating, tell the user to update them in the Vercel dashboard under the `jaspergrenager-langs-projects` team.
 

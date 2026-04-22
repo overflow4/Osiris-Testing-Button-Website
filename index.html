@@ -191,6 +191,18 @@
     .test-link{color:#60a5fa;text-decoration:underline;text-underline-offset:2px;word-break:break-all;} .test-link:hover{color:#93c5fd;}
     .copy-btn{background:none;border:1px solid var(--border);color:var(--text-dim);font-size:0.65rem;padding:0.2rem 0.5rem;border-radius:6px;cursor:pointer;font-family:inherit;transition:all 0.15s;} .copy-btn:hover{border-color:var(--text-dim);color:var(--text);} .copy-btn.copied{border-color:var(--green);color:var(--green);}
     .copy-all-bar{display:flex;justify-content:flex-end;padding:0 0 0.5rem 0;} .copy-all-bar .copy-btn{font-size:0.75rem;padding:0.3rem 0.8rem;}
+    .browser-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;}
+    @media(max-width:900px){.browser-grid{grid-template-columns:1fr;}}
+    .screenshot-gallery{display:flex;flex-direction:column;gap:0.5rem;padding:0.5rem;}
+    .screenshot-item{border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+    .screenshot-item img{width:100%;display:block;cursor:pointer;transition:opacity 0.15s;}
+    .screenshot-item img:hover{opacity:0.85;}
+    .screenshot-label{font-size:0.65rem;color:var(--text-dim);padding:0.25rem 0.5rem;background:var(--surface-2);}
+    .section-result{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.8rem;font-size:0.75rem;border-bottom:1px solid var(--border);}
+    .section-result .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .section-result .dot.pass{background:var(--green);} .section-result .dot.fail{background:var(--red);}
+    .screenshot-modal{position:fixed;inset:0;background:#000000dd;z-index:300;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+    .screenshot-modal img{max-width:90vw;max-height:90vh;border-radius:8px;}
 
     .checks{padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;}
     .checks h4{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.35rem;}
@@ -289,6 +301,35 @@
       </div>
       <div class="transcript" id="tEmail"><div class="transcript-empty">Waiting to run...</div></div>
       <div class="checks" id="chkEmail" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="browser-grid" id="browserGrid" style="display:none;">
+    <div class="test-panel" id="panelInvoiceBrowser">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box" style="background:#3b82f620;">&#128269;</div><h3>Invoice Browser Test</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelInvoiceBrowser',this)">Copy</button><span class="badge badge-idle" id="badgeInvoiceBrowser">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mInvScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mInvScreens">--</div><div class="lbl">Screenshots</div></div>
+      </div>
+      <div class="transcript" id="tInvoiceBrowser"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="invScreenshots"></div>
+      <div class="checks" id="chkInvoiceBrowser" style="display:none;"></div>
+    </div>
+    <div class="test-panel" id="panelPortal">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box" style="background:#8b5cf620;">&#127968;</div><h3>Portal Test</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelPortal',this)">Copy</button><span class="badge badge-idle" id="badgePortal">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mPortalScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mPortalSections">--</div><div class="lbl">Sections</div></div>
+      </div>
+      <div class="transcript" id="tPortal"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="portalScreenshots"></div>
+      <div class="checks" id="chkPortal" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -567,7 +608,7 @@
 
   function copyAllPanels(btn) {
     btn.dataset.label = btn.dataset.label || btn.textContent;
-    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail'];
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal'];
     const text = `Jack's Tester — Full Test Report\nRun: ${new Date().toISOString()}\n\n` +
       panels.map(p => formatPanelText(p)).join('\n\n');
     navigator.clipboard.writeText(text).then(() => flashCopied(btn));
@@ -700,11 +741,13 @@
   }
 
   function resetPanels() {
-    ['tVoice','tSms','tWeb','tEmail'].forEach(id => { document.getElementById(id).innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
-    ['chkVoice','chkSms','chkWeb','chkEmail'].forEach(id => { document.getElementById(id).style.display = 'none'; });
-    ['badgeVoice','badgeSms','badgeWeb','badgeEmail'].forEach(id => setBadge(id, 'idle', 'IDLE'));
-    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb'].forEach(id => { document.getElementById(id).textContent = '--'; });
+    ['tVoice','tSms','tWeb','tEmail','tInvoiceBrowser','tPortal'].forEach(id => { document.getElementById(id).innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
+    ['chkVoice','chkSms','chkWeb','chkEmail','chkInvoiceBrowser','chkPortal'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    ['badgeVoice','badgeSms','badgeWeb','badgeEmail','badgeInvoiceBrowser','badgePortal'].forEach(id => setBadge(id, 'idle', 'IDLE'));
+    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb','mInvScore','mInvScreens','mPortalScore','mPortalSections'].forEach(id => { document.getElementById(id).textContent = '--'; });
     document.getElementById('audioRow').style.display = 'none';
+    document.getElementById('invScreenshots').innerHTML = '';
+    document.getElementById('portalScreenshots').innerHTML = '';
   }
 
   // ── Data Reset ──
@@ -1143,6 +1186,136 @@
     }
   }
 
+  // ── Screenshot Modal ──
+  function showScreenshotModal(src) {
+    const modal = document.createElement('div');
+    modal.className = 'screenshot-modal';
+    modal.innerHTML = `<img src="${src}">`;
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  }
+
+  function addScreenshot(galleryId, b64, label) {
+    const gallery = document.getElementById(galleryId);
+    const item = document.createElement('div');
+    item.className = 'screenshot-item';
+    const src = `data:image/jpeg;base64,${b64}`;
+    item.innerHTML = `<div class="screenshot-label">${label}</div><img src="${src}" onclick="showScreenshotModal('${src}')">`;
+    gallery.appendChild(item);
+  }
+
+  // ── Invoice Browser Test ──
+  async function testInvoiceBrowser(biz, quoteUrl) {
+    if (!quoteUrl) {
+      addSys('tInvoiceBrowser', 'No invoice URL available — skipping browser test.', 'sys-warn');
+      setBadge('badgeInvoiceBrowser', 'fail', 'SKIPPED');
+      return 'SKIPPED';
+    }
+    setBadge('badgeInvoiceBrowser', 'running', 'TESTING');
+    addPhase('tInvoiceBrowser', 'Invoice Browser Test');
+    addSys('tInvoiceBrowser', `Opening ${quoteUrl} in browser...`);
+
+    try {
+      const r = await fetch('/api/browser-test-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteUrl, businessName: biz.name })
+      });
+      const data = await r.json();
+
+      if (data.error) {
+        addSys('tInvoiceBrowser', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgeInvoiceBrowser', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      // Display checks
+      const checks = data.checks || [];
+      checks.forEach(c => {
+        addSys('tInvoiceBrowser', `${c.s ? '✓' : '✗'} ${c.t}: ${c.d || ''}`, c.s ? 'sys-ok' : 'sys-err');
+      });
+      showChecks('chkInvoiceBrowser', checks.map(c => ({ t: c.t, s: c.s })));
+
+      // Display screenshots
+      let screenCount = 0;
+      if (data.screenshots) {
+        if (data.screenshots.before) { addScreenshot('invScreenshots', data.screenshots.before, 'Initial Load'); screenCount++; }
+        if (data.screenshots.afterSelection) { addScreenshot('invScreenshots', data.screenshots.afterSelection, 'After Tier Selection'); screenCount++; }
+        if (data.screenshots.afterCheckout) { addScreenshot('invScreenshots', data.screenshots.afterCheckout, 'After Checkout Click'); screenCount++; }
+      }
+
+      document.getElementById('mInvScore').textContent = data.score || '--';
+      document.getElementById('mInvScreens').textContent = screenCount;
+      setBadge('badgeInvoiceBrowser', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tInvoiceBrowser', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgeInvoiceBrowser', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
+  // ── Portal Test ──
+  async function testPortal(biz) {
+    const portalUrl = 'https://cleanmachine.live';
+    setBadge('badgePortal', 'running', 'TESTING');
+    addPhase('tPortal', 'Portal Browser Test');
+    addSys('tPortal', `Opening ${portalUrl} for ${biz.name}...`);
+
+    try {
+      const r = await fetch('/api/browser-test-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          portalUrl,
+          tenantSlug: biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          businessName: biz.name,
+          credentials: biz.portalCredentials || null,
+        })
+      });
+      const data = await r.json();
+
+      if (data.error) {
+        addSys('tPortal', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgePortal', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      // Display results per section
+      const results = data.results || [];
+      let screenCount = 0;
+      results.forEach(section => {
+        addPhase('tPortal', section.label);
+        addSys('tPortal', `${section.passed ? '✓' : '✗'} ${section.detail}`, section.passed ? 'sys-ok' : 'sys-err');
+
+        if (section.clickResults?.length) {
+          section.clickResults.forEach(cr => {
+            addSys('tPortal', `  Button "${cr.button}": ${cr.worked ? 'OK' : 'Failed'}`, cr.worked ? 'sys-ok' : 'sys-err');
+          });
+        }
+
+        if (section.screenshot) {
+          addScreenshot('portalScreenshots', section.screenshot, section.label);
+          screenCount++;
+        }
+      });
+
+      showChecks('chkPortal', results.map(r => ({ t: r.label, s: r.passed })));
+      document.getElementById('mPortalScore').textContent = data.score || '--';
+      document.getElementById('mPortalSections').textContent = screenCount;
+      setBadge('badgePortal', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tPortal', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgePortal', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
   // ── Run All Tests on Checked Businesses ──
   function finishRun() {
     running = false;
@@ -1165,6 +1338,7 @@
     btn.innerHTML = '<span class="spinner-sm"></span> Running Tests...';
     document.getElementById('stopBtn').style.display = 'inline-block';
     document.getElementById('testGrid').style.display = 'grid';
+    document.getElementById('browserGrid').style.display = 'grid';
     document.getElementById('copyAllBar').style.display = 'flex';
 
     const testLabel = document.getElementById('testingLabel');
@@ -1185,25 +1359,49 @@
 
         await resetTestData();
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 1/4: Voice call...`);
+        setStatus(`[${biz.name}] Test 1/6: Voice call...`);
         const voice = await testVoice(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 2/4: SMS...`);
+        setStatus(`[${biz.name}] Test 2/6: SMS...`);
         const sms = await testSms(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 3/4: Website form...`);
+        setStatus(`[${biz.name}] Test 3/6: Website form...`);
         const web = await testWebForm(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 4/4: Email...`);
+        setStatus(`[${biz.name}] Test 4/6: Email...`);
         const email = await testEmail(biz);
 
-        allResults.push({ name: biz.name, voice, sms, web, email });
+        // Collect any invoice URL found during tests for browser testing
+        let foundInvoiceUrl = null;
+        const allTranscripts = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
+        for (const tid of allTranscripts) {
+          const el = document.getElementById(tid);
+          if (el) {
+            const links = el.querySelectorAll('a.test-link');
+            for (const link of links) {
+              if (/cleanmachine|quote/i.test(link.href)) { foundInvoiceUrl = link.href; break; }
+            }
+          }
+          if (foundInvoiceUrl) break;
+        }
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 5/6: Invoice browser test...`);
+        document.getElementById('invScreenshots').innerHTML = '';
+        const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 6/6: Portal test...`);
+        document.getElementById('portalScreenshots').innerHTML = '';
+        const portal = await testPortal(biz);
+
+        allResults.push({ name: biz.name, voice, sms, web, email, invoiceBrowser, portal });
       }
     } catch (e) {
       if (e.message === '__STOPPED__') {
@@ -1226,7 +1424,7 @@
 
     // Generate AI summary from test logs
     setStatus('Generating AI summary...');
-    const panelIds = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
+    const panelIds = ['tVoice', 'tSms', 'tWeb', 'tEmail', 'tInvoiceBrowser', 'tPortal'];
     const panelLogs = panelIds.map(id => {
       const el = document.getElementById(id);
       return el ? `## ${id}\n${el.innerText}` : '';
@@ -1246,7 +1444,7 @@
     // Send AI summary first, then short results
     setStatus('Sending notifications...');
     if (aiSummary) await sendNotification(aiSummary);
-    const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}`).join(' | ');
+    const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}, Invoice=${r.invoiceBrowser||'N/A'}, Portal=${r.portal||'N/A'}`).join(' | ');
     await sendNotification(`Jack's Tester done. ${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 

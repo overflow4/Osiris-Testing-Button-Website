@@ -19,6 +19,8 @@
   },
   "homepage": "https://github.com/overflow4/Osiris-Testing-Button-Website#readme",
   "dependencies": {
-    "nodemailer": "^8.0.5"
+    "@browserbasehq/sdk": "^2.10.0",
+    "nodemailer": "^8.0.5",
+    "playwright-core": "^1.59.1"
   }
 }
