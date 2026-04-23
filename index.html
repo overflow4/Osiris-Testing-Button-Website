@@ -1297,21 +1297,26 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   const LOCAL_BROWSER_SERVER = 'http://localhost:3847';
 
   async function browserFetch(endpoint, body) {
-    // Try local server first, fall back to Vercel API
-    try {
-      const localRes = await fetch(`${LOCAL_BROWSER_SERVER}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(300000),
-      });
-      const data = await localRes.json();
-      if (!data.error) return { data, source: 'local' };
-      console.log('Local browser server error, trying Vercel...', data.error);
-    } catch (e) {
-      console.log('Local browser server unavailable, trying Vercel...', e.message);
+    // Try local server first with retries, fall back to Vercel API
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await sleep(3000);
+        const localRes = await fetch(`${LOCAL_BROWSER_SERVER}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(300000),
+        });
+        const data = await localRes.json();
+        if (!data.error) return { data, source: 'local' };
+        console.log(`Local server error (attempt ${attempt+1}):`, data.error);
+        return { data, source: 'local' }; // Return error from local, don't fall back
+      } catch (e) {
+        console.log(`Local server unavailable (attempt ${attempt+1}/3):`, e.message);
+      }
     }
-    // Fall back to Vercel API
+    // Fall back to Vercel API only if local server is truly unreachable
+    console.log('Local server unreachable after 3 attempts, trying Vercel cloud...');
     const apiMap = { '/invoice': '/api/browser-test-invoice', '/portal': '/api/browser-test-portal' };
     const r = await fetch(apiMap[endpoint] || endpoint, {
       method: 'POST',
@@ -1334,7 +1339,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
     try {
       const { data, source } = await browserFetch('/invoice', { quoteUrl, businessName: biz.name });
-      addSys('tInvoiceBrowser', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`);
+      addSys('tInvoiceBrowser', `Running via ${source === 'local' ? 'local Playwright (localhost:3847)' : 'Browserbase cloud — local server not reachable, make sure it is running'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
 
       if (data.error) {
         addSys('tInvoiceBrowser', `Error: ${data.error}`, 'sys-err');
@@ -1393,7 +1398,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         businessName: biz.name,
         credentials: biz.portalCredentials || null,
       });
-      addSys('tPortal', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`);
+      addSys('tPortal', `Running via ${source === 'local' ? 'local Playwright (localhost:3847)' : 'Browserbase cloud — local server not reachable, make sure it is running'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
 
       if (data.error) {
         addSys('tPortal', `Error: ${data.error}`, 'sys-err');
