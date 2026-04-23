@@ -232,6 +232,30 @@
     }
     .testing-label .biz-name { color:var(--accent); }
     .testing-label .progress { color:var(--text-dim); font-weight:400; float:right; }
+
+    /* Extended test grids */
+    .test-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1.5rem; }
+    @media(max-width:1100px){.test-grid-3{grid-template-columns:1fr 1fr;}}
+    @media(max-width:640px){.test-grid-3{grid-template-columns:1fr;}}
+    .test-grid-full { display:grid; grid-template-columns:1fr; gap:1rem; margin-bottom:1.5rem; }
+
+    .section-divider {
+      display:flex; align-items:center; gap:0.8rem; margin:1.5rem 0 0.8rem;
+      font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text-muted);
+    }
+    .section-divider::before, .section-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    .icon-dash{background:#8b5cf620;} .icon-pub{background:#f59e0b20;} .icon-crew{background:#10b98120;}
+    .icon-cust{background:#ec489920;} .icon-api{background:#6366f120;}
+
+    .result-grid { max-height:400px; overflow-y:auto; }
+    .result-row { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0.75rem; font-size:0.72rem; border-bottom:1px solid var(--border); }
+    .result-row .rdot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .result-row .rdot.rpass { background:var(--green); }
+    .result-row .rdot.rfail { background:var(--red); }
+    .result-row .rlabel { font-weight:600; min-width:140px; }
+    .result-row .rdetail { color:var(--text-dim); flex:1; }
+    .result-row .rcounts { color:var(--text-muted); font-family:'JetBrains Mono',monospace; font-size:0.65rem; }
   </style>
 </head>
 <body>
@@ -344,6 +368,87 @@
     </div>
   </div>
 
+  <!-- Extended Test Panels -->
+  <div class="section-divider" id="extendedDivider" style="display:none;">Extended Tests</div>
+
+  <div class="test-grid-3" id="extendedGrid" style="display:none;">
+    <!-- Dashboard Deep Test -->
+    <div class="test-panel" id="panelDashboard">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box icon-dash">&#128202;</div><h3>Dashboard Pages</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelDashboard',this)">Copy</button><span class="badge badge-idle" id="badgeDashboard">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mDashScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mDashPages">--</div><div class="lbl">Pages</div></div>
+      </div>
+      <div class="transcript" id="tDashboard"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="dashScreenshots"></div>
+      <div class="checks" id="chkDashboard" style="display:none;"></div>
+    </div>
+
+    <!-- Public Pages Test -->
+    <div class="test-panel" id="panelPublic">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box icon-pub">&#127760;</div><h3>Public Pages</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelPublic',this)">Copy</button><span class="badge badge-idle" id="badgePublic">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mPubScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mPubPages">--</div><div class="lbl">Pages</div></div>
+      </div>
+      <div class="transcript" id="tPublic"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="pubScreenshots"></div>
+      <div class="checks" id="chkPublic" style="display:none;"></div>
+    </div>
+
+    <!-- Crew Portal Test -->
+    <div class="test-panel" id="panelCrew">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box icon-crew">&#128119;</div><h3>Crew Portal</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelCrew',this)">Copy</button><span class="badge badge-idle" id="badgeCrew">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mCrewScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mCrewItems">--</div><div class="lbl">Checks</div></div>
+      </div>
+      <div class="transcript" id="tCrew"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="crewScreenshots"></div>
+      <div class="checks" id="chkCrew" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="browser-grid" id="extendedGrid2" style="display:none;">
+    <!-- Customer Pages Test -->
+    <div class="test-panel" id="panelCustomer">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box icon-cust">&#128176;</div><h3>Customer Pages</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelCustomer',this)">Copy</button><span class="badge badge-idle" id="badgeCustomer">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mCustScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mCustItems">--</div><div class="lbl">Checks</div></div>
+      </div>
+      <div class="transcript" id="tCustomer"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="screenshot-gallery" id="custScreenshots"></div>
+      <div class="checks" id="chkCustomer" style="display:none;"></div>
+    </div>
+
+    <!-- API Health Test -->
+    <div class="test-panel" id="panelApiHealth">
+      <div class="tpanel-header">
+        <div class="left"><div class="icon-box icon-api">&#9889;</div><h3>API Health</h3></div>
+        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelApiHealth',this)">Copy</button><span class="badge badge-idle" id="badgeApiHealth">IDLE</span></div>
+      </div>
+      <div class="tpanel-metrics">
+        <div class="tpanel-metric"><div class="val" id="mApiScore">--</div><div class="lbl">Score</div></div>
+        <div class="tpanel-metric"><div class="val" id="mApiEndpoints">--</div><div class="lbl">Endpoints</div></div>
+      </div>
+      <div class="transcript" id="tApiHealth"><div class="transcript-empty">Waiting to run...</div></div>
+      <div class="checks" id="chkApiHealth" style="display:none;"></div>
+    </div>
+  </div>
+
   <div id="diagBox" style="display:none;" class="diag-box">
     <div class="diag-header">
       <span>Diagnostic Prompt</span>
@@ -365,6 +470,9 @@
     <label><span class="lbl">Email Address (for email testing)</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
     <label><span class="lbl">Portal Login Email (for portal testing)</span><input type="text" id="inPortalEmail" placeholder="admin@business.com"></label>
     <label><span class="lbl">Portal Login Password</span><input type="password" id="inPortalPass" placeholder="portal password"></label>
+    <label><span class="lbl">Public Website URL (for marketing pages)</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
+    <label><span class="lbl">Crew Portal URL (token auth)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live/crew/TOKEN"></label>
+    <label><span class="lbl">API Base URL</span><input type="text" id="inApiUrl" placeholder="https://cleanmachine.live"></label>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-accent" id="modalSaveBtn" onclick="saveBiz()">Add Business</button>
@@ -629,15 +737,15 @@
 
   function copyAllPanels(btn) {
     btn.dataset.label = btn.dataset.label || btn.textContent;
-    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal'];
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelCustomer', 'panelApiHealth'];
     const text = `Jack's Tester — Full Test Report\nRun: ${new Date().toISOString()}\n\n` +
       panels.map(p => formatPanelText(p)).join('\n\n');
     navigator.clipboard.writeText(text).then(() => flashCopied(btn));
   }
 
   function generateDiagPrompt(bizName, results) {
-    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal'];
-    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Invoice Browser', portal: 'Portal' };
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelCustomer', 'panelApiHealth'];
+    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Invoice Browser', portal: 'Portal', dashboard: 'Dashboard Pages', publicPages: 'Public Pages', crewPortal: 'Crew Portal', customerPages: 'Customer Pages', apiHealth: 'API Health' };
 
     // Collect failures
     const failures = [];
@@ -788,6 +896,9 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     document.getElementById('inEmail').value = b.email || '';
     document.getElementById('inPortalEmail').value = b.portalCredentials?.email || '';
     document.getElementById('inPortalPass').value = b.portalCredentials?.password || '';
+    document.getElementById('inPublicUrl').value = b.publicUrl || '';
+    document.getElementById('inCrewUrl').value = b.crewUrl || '';
+    document.getElementById('inApiUrl').value = b.apiUrl || '';
     document.getElementById('modalTitle').textContent = 'Edit Business';
     document.getElementById('modalSaveBtn').textContent = 'Save Changes';
     document.getElementById('modalOverlay').classList.add('open');
@@ -797,7 +908,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   function closeModal() {
     editingBizIdx = -1;
     document.getElementById('modalOverlay').classList.remove('open');
-    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass'].forEach(id => document.getElementById(id).value = '');
+    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass','inPublicUrl','inCrewUrl','inApiUrl'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inBizType').selectedIndex = 0;
   }
 
@@ -815,6 +926,9 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         email: document.getElementById('inPortalEmail').value.trim(),
         password: document.getElementById('inPortalPass').value.trim(),
       },
+      publicUrl: document.getElementById('inPublicUrl').value.trim(),
+      crewUrl: document.getElementById('inCrewUrl').value.trim(),
+      apiUrl: document.getElementById('inApiUrl').value.trim(),
     };
     if (editingBizIdx >= 0) {
       data.checked = businesses[editingBizIdx].checked;
@@ -829,13 +943,17 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   }
 
   function resetPanels() {
-    ['tVoice','tSms','tWeb','tEmail','tInvoiceBrowser','tPortal'].forEach(id => { document.getElementById(id).innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
-    ['chkVoice','chkSms','chkWeb','chkEmail','chkInvoiceBrowser','chkPortal'].forEach(id => { document.getElementById(id).style.display = 'none'; });
-    ['badgeVoice','badgeSms','badgeWeb','badgeEmail','badgeInvoiceBrowser','badgePortal'].forEach(id => setBadge(id, 'idle', 'IDLE'));
-    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb','mInvScore','mInvScreens','mPortalScore','mPortalSections'].forEach(id => { document.getElementById(id).textContent = '--'; });
+    ['tVoice','tSms','tWeb','tEmail','tInvoiceBrowser','tPortal','tDashboard','tPublic','tCrew','tCustomer','tApiHealth'].forEach(id => { document.getElementById(id).innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
+    ['chkVoice','chkSms','chkWeb','chkEmail','chkInvoiceBrowser','chkPortal','chkDashboard','chkPublic','chkCrew','chkCustomer','chkApiHealth'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    ['badgeVoice','badgeSms','badgeWeb','badgeEmail','badgeInvoiceBrowser','badgePortal','badgeDashboard','badgePublic','badgeCrew','badgeCustomer','badgeApiHealth'].forEach(id => setBadge(id, 'idle', 'IDLE'));
+    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb','mInvScore','mInvScreens','mPortalScore','mPortalSections','mDashScore','mDashPages','mPubScore','mPubPages','mCrewScore','mCrewItems','mCustScore','mCustItems','mApiScore','mApiEndpoints'].forEach(id => { document.getElementById(id).textContent = '--'; });
     document.getElementById('audioRow').style.display = 'none';
     document.getElementById('invScreenshots').innerHTML = '';
     document.getElementById('portalScreenshots').innerHTML = '';
+    document.getElementById('dashScreenshots').innerHTML = '';
+    document.getElementById('pubScreenshots').innerHTML = '';
+    document.getElementById('crewScreenshots').innerHTML = '';
+    document.getElementById('custScreenshots').innerHTML = '';
     document.getElementById('diagBox').style.display = 'none';
   }
 
@@ -1322,7 +1440,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     }
     // Fall back to Vercel API only if local server is truly unreachable
     console.log('Local server unreachable after 3 attempts, trying Vercel cloud...');
-    const apiMap = { '/invoice': '/api/browser-test-invoice', '/portal': '/api/browser-test-portal' };
+    const apiMap = { '/invoice': '/api/browser-test-invoice', '/portal': '/api/browser-test-portal', '/pages': '/api/browser-test-pages', '/public': '/api/browser-test-public', '/crew': '/api/browser-test-crew', '/customer': '/api/browser-test-customer' };
     const r = await fetch(apiMap[endpoint] || endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1454,6 +1572,339 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     }
   }
 
+  // ── Dashboard Section Definitions ──
+  // All portal/dashboard pages grouped by category
+  const DASHBOARD_SECTIONS = [
+    // Core pages
+    { key: 'command_center', path: '/', label: 'Command Center', expectText: 'dashboard|overview|stats|revenue|activity|job|lead' },
+    { key: 'customers', path: '/customers', label: 'Customers', expectText: 'customer|contact|message|lead|phone' },
+    { key: 'calendar', path: '/calendar', label: 'Calendar (Jobs)', expectText: 'calendar|schedule|job|week|day|month' },
+    { key: 'pipeline', path: '/pipeline', label: 'Pipeline', expectText: 'pipeline|lead|quote|kanban|stage|retarget' },
+    { key: 'inbox', path: '/inbox', label: 'Inbox', expectText: 'inbox|message|conversation|thread|priority' },
+    { key: 'calls', path: '/calls', label: 'Calls', expectText: 'call|phone|inbound|outbound|log' },
+    { key: 'assistant', path: '/assistant', label: 'Assistant', expectText: 'assistant|ai|chat|conversation|message' },
+    // Teams
+    { key: 'teams', path: '/teams', label: 'Teams', expectText: 'team|cleaner|member|roster|crew' },
+    { key: 'teams_manage', path: '/teams/manage', label: 'Teams Manage', expectText: 'team|manage|create|assign|drag' },
+    { key: 'crew_assignment', path: '/crew-assignment', label: 'Crew Assignment', expectText: 'crew|assign|week|drag|cleaner' },
+    { key: 'schedule', path: '/schedule', label: 'Schedule', expectText: 'schedule|day|week|job|time' },
+    { key: 'my_schedule', path: '/my-schedule', label: 'My Schedule', expectText: 'schedule|day|week|time|availability' },
+    // Insights
+    { key: 'insights_leads', path: '/insights/leads', label: 'Insights: Leads', expectText: 'lead|conversion|revenue|source|metric' },
+    { key: 'insights_crews', path: '/insights/crews', label: 'Insights: Crews', expectText: 'crew|team|revenue|rating|rank|performance' },
+    { key: 'insights_retention', path: '/insights/retention', label: 'Insights: Retention', expectText: 'retention|health|repeat|risk|lifecycle' },
+    { key: 'insights_revenue', path: '/insights/revenue', label: 'Insights: Revenue', expectText: 'revenue|mrr|profit|monthly|trend' },
+    { key: 'insights_pricing', path: '/insights/pricing', label: 'Insights: Pricing', expectText: 'pricing|price|tier|add-on|addon|variance' },
+    { key: 'insights_funnel', path: '/insights/funnel', label: 'Insights: Funnel', expectText: 'funnel|conversion|stage|drop|bottleneck' },
+    // Retargeting & Campaigns
+    { key: 'retargeting', path: '/retargeting', label: 'Retargeting', expectText: 'retarget|sequence|re-engage|customer|follow' },
+    { key: 'campaigns', path: '/campaigns', label: 'Campaigns', expectText: 'campaign|sequence|csv|import|lead|follow' },
+    // Admin & Settings
+    { key: 'admin', path: '/admin', label: 'Admin', expectText: 'admin|business|tenant|config|setup|credential' },
+    { key: 'settings', path: '/settings', label: 'Settings', expectText: 'setting|profile|account|config|timezone|business' },
+    { key: 'exceptions', path: '/exceptions', label: 'Exceptions (Debug)', expectText: 'exception|event|error|log|system|debug' },
+    { key: 'rain_day', path: '/rain-day', label: 'Rain Day', expectText: 'rain|reschedule|weather|date|job' },
+    // Financial
+    { key: 'leaderboard', path: '/leaderboard', label: 'Leaderboard', expectText: 'leaderboard|rank|top|performer|tip|upsell' },
+    { key: 'earnings', path: '/earnings', label: 'Earnings', expectText: 'earning|tip|upsell|revenue|team' },
+    { key: 'memberships', path: '/memberships', label: 'Memberships', expectText: 'membership|plan|status|pause|resume|cancel' },
+    // WinBros specific
+    { key: 'performance', path: '/performance', label: 'Performance', expectText: 'performance|revenue|job|review|sales' },
+    { key: 'payroll', path: '/payroll', label: 'Payroll', expectText: 'payroll|pay|rate|commission|week|draft|finalize' },
+    { key: 'service_plan_hub', path: '/service-plan-hub', label: 'Service Plan Hub', expectText: 'plan|arr|revenue|active|cancel' },
+    { key: 'service_plan_schedule', path: '/service-plan-schedule', label: 'Service Plan Schedule', expectText: 'schedule|plan|unscheduled|auto|drag|week' },
+    { key: 'control_center', path: '/control-center', label: 'Control Center', expectText: 'control|setting|config|sms|flow' },
+  ];
+
+  // API endpoints to health-check (crons + webhooks)
+  const API_HEALTH_ENDPOINTS = [
+    // Crons
+    { path: '/api/crons/route-dispatch', label: 'route-dispatch', category: 'cron', method: 'GET' },
+    { path: '/api/crons/extend-recurring-jobs', label: 'extend-recurring-jobs', category: 'cron', method: 'GET' },
+    { path: '/api/crons/send-reminders', label: 'send-reminders', category: 'cron', method: 'GET' },
+    { path: '/api/crons/ghost-watchdog', label: 'ghost-watchdog', category: 'cron', method: 'GET' },
+    { path: '/api/crons/seasonal-reminders', label: 'seasonal-reminders', category: 'cron', method: 'GET' },
+    { path: '/api/crons/monthly-followup', label: 'monthly-followup', category: 'cron', method: 'GET' },
+    { path: '/api/crons/score-conversations', label: 'score-conversations', category: 'cron', method: 'GET' },
+    { path: '/api/crons/audit-tasks', label: 'audit-tasks', category: 'cron', method: 'GET' },
+    { path: '/api/crons/system-health', label: 'system-health', category: 'cron', method: 'GET' },
+    { path: '/api/crons/process-scheduled-tasks', label: 'process-scheduled-tasks', category: 'cron', method: 'GET' },
+    { path: '/api/crons/lifecycle-auto-enroll', label: 'lifecycle-auto-enroll', category: 'cron', method: 'GET' },
+    { path: '/api/crons/frequency-nudge', label: 'frequency-nudge', category: 'cron', method: 'GET' },
+    { path: '/api/crons/unified-daily', label: 'unified-daily', category: 'cron', method: 'GET' },
+    { path: '/api/crons/check-timeouts', label: 'check-timeouts', category: 'cron', method: 'GET' },
+    { path: '/api/crons/post-job-followup', label: 'post-job-followup', category: 'cron', method: 'GET' },
+    { path: '/api/crons/send-final-payments', label: 'send-final-payments', category: 'cron', method: 'GET' },
+    { path: '/api/crons/lifecycle-reengagement', label: 'lifecycle-reengagement', category: 'cron', method: 'GET' },
+    { path: '/api/crons/crew-briefing', label: 'crew-briefing', category: 'cron', method: 'GET' },
+    { path: '/api/crons/monthly-reengagement', label: 'monthly-reengagement', category: 'cron', method: 'GET' },
+    { path: '/api/crons/follow-up-quoted', label: 'follow-up-quoted', category: 'cron', method: 'GET' },
+    { path: '/api/crons/generate-blog-post', label: 'generate-blog-post', category: 'cron', method: 'GET' },
+    { path: '/api/crons/meta-ads-monitor', label: 'meta-ads-monitor', category: 'cron', method: 'GET' },
+    { path: '/api/crons/process-email-leads', label: 'process-email-leads', category: 'cron', method: 'GET' },
+    { path: '/api/crons/sync-openphone-contacts', label: 'sync-openphone-contacts', category: 'cron', method: 'GET' },
+    { path: '/api/crons/poll-meta-sheet', label: 'poll-meta-sheet', category: 'cron', method: 'GET' },
+    { path: '/api/crons/brain-ingest', label: 'brain-ingest', category: 'cron', method: 'GET' },
+    { path: '/api/crons/brain-learn', label: 'brain-learn', category: 'cron', method: 'GET' },
+    { path: '/api/crons/brain-embed', label: 'brain-embed', category: 'cron', method: 'GET' },
+    { path: '/api/crons/osiris-learn', label: 'osiris-learn', category: 'cron', method: 'GET' },
+    { path: '/api/crons/ghl-followups', label: 'ghl-followups', category: 'cron', method: 'GET' },
+    { path: '/api/crons/poll-lsa-leads', label: 'poll-lsa-leads', category: 'cron', method: 'GET' },
+    // Webhook endpoints
+    { path: '/api/webhooks/stripe', label: 'Stripe Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/openphone', label: 'OpenPhone Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/vapi', label: 'VAPI Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/telegram', label: 'Telegram Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/ghl', label: 'GoHighLevel Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/housecall-pro', label: 'HousecallPro Webhook', category: 'webhook', method: 'POST', body: {} },
+    { path: '/api/webhooks/meta', label: 'Meta Webhook', category: 'webhook', method: 'POST', body: {} },
+    // Key API routes
+    { path: '/api/health', label: 'Health Check', category: 'api', method: 'GET' },
+  ];
+
+  // ── Dashboard Deep Test ──
+  async function testDashboardPages(biz) {
+    setBadge('badgeDashboard', 'running', 'TESTING');
+    addPhase('tDashboard', 'Dashboard Pages Test');
+
+    const portalUrl = 'https://cleanmachine.live';
+    const tenantSlug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    // Run pages in batches to stay within timeout
+    const batchSize = 8;
+    const allResults = [];
+
+    for (let i = 0; i < DASHBOARD_SECTIONS.length; i += batchSize) {
+      if (stopRequested) break;
+      const batch = DASHBOARD_SECTIONS.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(DASHBOARD_SECTIONS.length / batchSize);
+      addSys('tDashboard', `Testing batch ${batchNum}/${totalBatches}: ${batch.map(s => s.label).join(', ')}...`);
+
+      try {
+        const { data, source } = await browserFetch('/pages', {
+          baseUrl: portalUrl,
+          sections: batch,
+          credentials: biz.portalCredentials || null,
+          businessName: biz.name,
+          loginFirst: i === 0, // Only login on first batch
+        });
+
+        if (data.error) {
+          addSys('tDashboard', `Batch ${batchNum} error: ${data.error}`, 'sys-err');
+          batch.forEach(s => allResults.push({ section: s.key, label: s.label, passed: false, detail: data.error }));
+          continue;
+        }
+
+        const results = data.results || [];
+        results.forEach(r => {
+          addSys('tDashboard', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+          if (r.screenshot) addScreenshot('dashScreenshots', r.screenshot, r.label);
+          allResults.push(r);
+        });
+
+      } catch (e) {
+        if (e.message === '__STOPPED__') throw e;
+        addSys('tDashboard', `Batch ${batchNum} failed: ${e.message}`, 'sys-err');
+        batch.forEach(s => allResults.push({ section: s.key, label: s.label, passed: false, detail: e.message }));
+      }
+    }
+
+    const passed = allResults.filter(r => r.passed).length;
+    const total = allResults.length;
+    document.getElementById('mDashScore').textContent = `${passed}/${total}`;
+    document.getElementById('mDashPages').textContent = total;
+    showChecks('chkDashboard', allResults.map(r => ({ t: r.label, s: r.passed })));
+    const pctPass = total > 0 ? passed / total >= 0.6 : false;
+    setBadge('badgeDashboard', pctPass ? 'pass' : 'fail', `${passed}/${total}`);
+    return pctPass ? 'PASS' : 'FAIL';
+  }
+
+  // ── Public Pages Test ──
+  async function testPublicPages(biz) {
+    if (!biz.publicUrl) { setBadge('badgePublic', 'fail', 'SKIPPED'); addSys('tPublic', 'No public website URL configured.', 'sys-warn'); return 'SKIPPED'; }
+    setBadge('badgePublic', 'running', 'TESTING');
+    addPhase('tPublic', 'Public Pages Test');
+    addSys('tPublic', `Testing public pages at ${biz.publicUrl}...`);
+
+    try {
+      const { data, source } = await browserFetch('/public', {
+        websiteUrl: biz.publicUrl,
+        businessName: biz.name,
+      });
+      addSys('tPublic', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
+
+      if (data.error) {
+        addSys('tPublic', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgePublic', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      const results = data.results || [];
+      results.forEach(r => {
+        addSys('tPublic', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+        if (r.screenshot) addScreenshot('pubScreenshots', r.screenshot, r.label);
+      });
+
+      showChecks('chkPublic', results.map(r => ({ t: r.label, s: r.passed })));
+      document.getElementById('mPubScore').textContent = data.score || '--';
+      document.getElementById('mPubPages').textContent = results.length;
+      setBadge('badgePublic', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tPublic', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgePublic', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
+  // ── Crew Portal Test ──
+  async function testCrewPortal(biz) {
+    if (!biz.crewUrl) { setBadge('badgeCrew', 'fail', 'SKIPPED'); addSys('tCrew', 'No crew portal URL configured.', 'sys-warn'); return 'SKIPPED'; }
+    setBadge('badgeCrew', 'running', 'TESTING');
+    addPhase('tCrew', 'Crew Portal Test');
+    addSys('tCrew', `Testing crew portal at ${biz.crewUrl}...`);
+
+    try {
+      const { data, source } = await browserFetch('/crew', {
+        crewPortalUrl: biz.crewUrl,
+        businessName: biz.name,
+      });
+      addSys('tCrew', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
+
+      if (data.error) {
+        addSys('tCrew', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgeCrew', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      const results = data.results || [];
+      results.forEach(r => {
+        addSys('tCrew', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+        if (r.screenshot) addScreenshot('crewScreenshots', r.screenshot, r.label);
+      });
+
+      showChecks('chkCrew', results.map(r => ({ t: r.label, s: r.passed })));
+      document.getElementById('mCrewScore').textContent = data.score || '--';
+      document.getElementById('mCrewItems').textContent = results.length;
+      setBadge('badgeCrew', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tCrew', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgeCrew', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
+  // ── Customer Pages Test ──
+  async function testCustomerPages(biz, quoteUrl) {
+    setBadge('badgeCustomer', 'running', 'TESTING');
+    addPhase('tCustomer', 'Customer Pages Test');
+
+    // Need a quote URL (from previous test) or skip
+    if (!quoteUrl) {
+      addSys('tCustomer', 'No quote URL available from previous tests — skipping.', 'sys-warn');
+      setBadge('badgeCustomer', 'fail', 'SKIPPED');
+      return 'SKIPPED';
+    }
+
+    addSys('tCustomer', `Testing customer quote page: ${quoteUrl}`);
+
+    try {
+      const { data, source } = await browserFetch('/customer', {
+        quoteUrl,
+        businessName: biz.name,
+        businessType: biz.type || 'window_cleaning',
+      });
+      addSys('tCustomer', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
+
+      if (data.error) {
+        addSys('tCustomer', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgeCustomer', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      const results = data.results || [];
+      results.forEach(r => {
+        addSys('tCustomer', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+        if (r.screenshot) addScreenshot('custScreenshots', r.screenshot, r.label);
+      });
+
+      showChecks('chkCustomer', results.map(r => ({ t: r.label, s: r.passed })));
+      document.getElementById('mCustScore').textContent = data.score || '--';
+      document.getElementById('mCustItems').textContent = results.length;
+      setBadge('badgeCustomer', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tCustomer', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgeCustomer', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
+  // ── API Health Test ──
+  async function testApiHealth(biz) {
+    const apiBase = biz.apiUrl || 'https://cleanmachine.live';
+    setBadge('badgeApiHealth', 'running', 'TESTING');
+    addPhase('tApiHealth', 'API Health Check');
+    addSys('tApiHealth', `Testing ${API_HEALTH_ENDPOINTS.length} endpoints at ${apiBase}...`);
+
+    try {
+      const res = await fetch('/api/test-api-health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiBaseUrl: apiBase,
+          endpoints: API_HEALTH_ENDPOINTS,
+          businessName: biz.name,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        addSys('tApiHealth', `Error: ${data.error}`, 'sys-err');
+        setBadge('badgeApiHealth', 'fail', 'ERROR');
+        return 'FAIL';
+      }
+
+      const results = data.results || [];
+
+      // Group by category
+      const categories = {};
+      results.forEach(r => {
+        if (!categories[r.category]) categories[r.category] = [];
+        categories[r.category].push(r);
+      });
+
+      for (const [cat, items] of Object.entries(categories)) {
+        addPhase('tApiHealth', cat.toUpperCase());
+        const passed = items.filter(r => r.passed).length;
+        addSys('tApiHealth', `${passed}/${items.length} ${cat} endpoints responding`);
+        items.forEach(r => {
+          addSys('tApiHealth', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+        });
+      }
+
+      showChecks('chkApiHealth', results.map(r => ({ t: `[${r.category}] ${r.label}`, s: r.passed })));
+      document.getElementById('mApiScore').textContent = data.score || '--';
+      document.getElementById('mApiEndpoints').textContent = results.length;
+      setBadge('badgeApiHealth', data.passed ? 'pass' : 'fail', data.score || '0/0');
+      return data.passed ? 'PASS' : 'FAIL';
+
+    } catch (e) {
+      if (e.message === '__STOPPED__') throw e;
+      addSys('tApiHealth', `Error: ${e.message}`, 'sys-err');
+      setBadge('badgeApiHealth', 'fail', 'ERROR');
+      return 'FAIL';
+    }
+  }
+
   // ── Run All Tests on Checked Businesses ──
   function finishRun() {
     running = false;
@@ -1477,6 +1928,9 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     document.getElementById('stopBtn').style.display = 'inline-block';
     document.getElementById('testGrid').style.display = 'grid';
     document.getElementById('browserGrid').style.display = 'grid';
+    document.getElementById('extendedDivider').style.display = 'flex';
+    document.getElementById('extendedGrid').style.display = 'grid';
+    document.getElementById('extendedGrid2').style.display = 'grid';
     document.getElementById('copyAllBar').style.display = 'flex';
 
     const testLabel = document.getElementById('testingLabel');
@@ -1497,22 +1951,22 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
         await resetTestData();
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 1/6: Voice call...`);
+        setStatus(`[${biz.name}] Test 1/11: Voice call...`);
         const voice = await testVoice(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 2/6: SMS...`);
+        setStatus(`[${biz.name}] Test 2/11: SMS...`);
         const sms = await testSms(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 3/6: Website form...`);
+        setStatus(`[${biz.name}] Test 3/11: Website form...`);
         const web = await testWebForm(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 4/6: Email...`);
+        setStatus(`[${biz.name}] Test 4/11: Email...`);
         const email = await testEmail(biz);
 
         // Collect any invoice URL found during tests for browser testing
@@ -1530,16 +1984,40 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 5/6: Invoice browser test...`);
+        setStatus(`[${biz.name}] Test 5/11: Invoice browser test...`);
         document.getElementById('invScreenshots').innerHTML = '';
         const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
 
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 6/6: Portal test...`);
+        setStatus(`[${biz.name}] Test 6/11: Portal test...`);
         document.getElementById('portalScreenshots').innerHTML = '';
         const portal = await testPortal(biz);
 
-        const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal };
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 7/11: Dashboard pages...`);
+        document.getElementById('dashScreenshots').innerHTML = '';
+        const dashboard = await testDashboardPages(biz);
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 8/11: Public pages...`);
+        document.getElementById('pubScreenshots').innerHTML = '';
+        const publicPages = await testPublicPages(biz);
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 9/11: Crew portal...`);
+        document.getElementById('crewScreenshots').innerHTML = '';
+        const crewPortal = await testCrewPortal(biz);
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 10/11: Customer pages...`);
+        document.getElementById('custScreenshots').innerHTML = '';
+        const customerPages = await testCustomerPages(biz, foundInvoiceUrl);
+
+        if (stopRequested) break;
+        setStatus(`[${biz.name}] Test 11/11: API health...`);
+        const apiHealth = await testApiHealth(biz);
+
+        const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, apiHealth };
         allResults.push(bizResults);
 
         // Show diagnostic prompt if any test failed
@@ -1586,7 +2064,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     // Send AI summary first, then short results
     setStatus('Sending notifications...');
     if (aiSummary) await sendNotification(aiSummary);
-    const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}, Invoice=${r.invoiceBrowser||'N/A'}, Portal=${r.portal||'N/A'}`).join(' | ');
+    const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}, Invoice=${r.invoiceBrowser||'N/A'}, Portal=${r.portal||'N/A'}, Dash=${r.dashboard||'N/A'}, Public=${r.publicPages||'N/A'}, Crew=${r.crewPortal||'N/A'}, Customer=${r.customerPages||'N/A'}, API=${r.apiHealth||'N/A'}`).join(' | ');
     await sendNotification(`Jack's Tester done. ${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 

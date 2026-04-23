@@ -562,6 +562,258 @@ async function handlePortalTest(body) {
 }
 
 // ═══════════════════════════════════════════
+// GENERIC PAGES TEST (for dashboard deep testing)
+// ═══════════════════════════════════════════
+async function handlePagesTest(data) {
+  const { baseUrl, sections, credentials, businessName, loginFirst } = data;
+  if (!baseUrl || !sections?.length) return { error: 'Missing baseUrl or sections' };
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const base = baseUrl.replace(/\/+$/, '');
+    const results = [];
+
+    // Login if needed
+    if (loginFirst && credentials?.email) {
+      console.log(`[pages:${businessName}] Logging in at ${base}...`);
+      await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(5000);
+
+      const currentUrl = page.url();
+      const isLoginPage = /login|signin|sign-in|auth/i.test(currentUrl);
+      const hasLoginForm = await page.evaluate(() => {
+        const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[name="username"]');
+        return inputs.length > 0;
+      }).catch(() => false);
+
+      if (hasLoginForm || isLoginPage) {
+        try {
+          const emailField = await page.$('input[type="email"], input[name="email"], input[name="username"], input[placeholder*="email" i], input[placeholder*="username" i]');
+          if (emailField) await emailField.fill(credentials.email || '');
+          const passField = await page.$('input[type="password"], input[name="password"]');
+          if (passField) await passField.fill(credentials.password || '');
+          await page.waitForTimeout(500);
+          const submitBtn = await page.$('button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("INITIALIZE")');
+          if (submitBtn) { await submitBtn.click(); await page.waitForTimeout(6000); }
+          const roleBtn = await page.$('button:has-text("Operator"), button:has-text("Owner"), button:has-text("Admin")');
+          if (roleBtn) { await roleBtn.click(); await page.waitForTimeout(3000); }
+        } catch (e) { console.log(`[pages:${businessName}] Login failed: ${e.message}`); }
+      }
+
+      const loginSs = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+      results.push({ section: 'login', label: 'Login', passed: !isLoginPage || page.url() !== currentUrl, detail: `After login: ${page.url().slice(0, 80)}`, screenshot: loginSs.toString('base64') });
+    }
+
+    // Test each section
+    for (const section of sections) {
+      const sectionKey = section.key || section.path.replace(/\//g, '_').replace(/^_/, '') || 'root';
+      console.log(`[pages:${businessName}] Testing: ${section.label} (${section.path})`);
+      try {
+        await page.goto(`${base}${section.path}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(section.waitMs || 4000);
+        const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+        const info = await page.evaluate((expectPattern) => {
+          const bodyText = document.body.innerText || '';
+          const hasContent = bodyText.length > 50;
+          const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(bodyText) : true;
+          const isError = /error|not found|404|500|something went wrong/i.test(bodyText) && bodyText.length < 500;
+          const isLoading = /loading\.\.\.|please wait/i.test(bodyText) && bodyText.length < 200;
+          const buttons = [...document.querySelectorAll('button:not([disabled])')].filter(b => b.offsetParent !== null);
+          const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea');
+          const tables = document.querySelectorAll('table, [role="grid"], [class*="table"]');
+          const charts = document.querySelectorAll('canvas, svg[class*="chart"], [class*="chart"], [class*="recharts"]');
+          const toggles = document.querySelectorAll('input[type="checkbox"], input[role="switch"], [class*="switch"], [class*="toggle"]');
+          const tabs = document.querySelectorAll('[role="tab"], [class*="tab"]');
+          const cards = document.querySelectorAll('[class*="card"]');
+          const badges = document.querySelectorAll('[class*="badge"]');
+          return { hasContent, hasExpected, isError, isLoading,
+            counts: { buttons: buttons.length, inputs: inputs.length, tables: tables.length, charts: charts.length, toggles: toggles.length, tabs: tabs.length, cards: cards.length, badges: badges.length } };
+        }, section.expectText || null).catch(() => ({ hasContent: false, hasExpected: false, isError: true, isLoading: false, counts: {} }));
+        const passed = info.hasContent && !info.isError && !info.isLoading && info.hasExpected;
+        const countParts = [];
+        if (info.counts.buttons) countParts.push(`${info.counts.buttons} btn`);
+        if (info.counts.inputs) countParts.push(`${info.counts.inputs} input`);
+        if (info.counts.tables) countParts.push(`${info.counts.tables} tbl`);
+        if (info.counts.charts) countParts.push(`${info.counts.charts} chart`);
+        if (info.counts.toggles) countParts.push(`${info.counts.toggles} toggle`);
+        if (info.counts.tabs) countParts.push(`${info.counts.tabs} tab`);
+        const detail = info.isError ? 'Error page' : info.isLoading ? 'Stuck loading' : !info.hasContent ? 'Empty page' : !info.hasExpected ? 'Missing expected content' : countParts.join(', ') || 'Content loaded';
+        results.push({ section: sectionKey, label: section.label, passed, detail, screenshot: screenshot.toString('base64'), counts: info.counts });
+      } catch (e) {
+        results.push({ section: sectionKey, label: section.label, passed: false, detail: `Navigation failed: ${e.message.slice(0, 100)}`, screenshot: null, counts: {} });
+      }
+    }
+
+    await browser.close();
+    const passedCount = results.filter(r => r.passed).length;
+    return { passed: passedCount >= Math.ceil(results.length * 0.7), score: `${passedCount}/${results.length}`, results, businessName };
+  } catch (e) {
+    if (browser) await browser.close().catch(() => {});
+    return { error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════
+// PUBLIC PAGES TEST
+// ═══════════════════════════════════════════
+async function handlePublicTest(data) {
+  const { websiteUrl, businessName } = data;
+  if (!websiteUrl) return { error: 'Missing websiteUrl' };
+
+  const PUBLIC_SECTIONS = [
+    { path: '/', label: 'Home Page', expectText: 'book|clean|service|quote|window|spotless' },
+    { path: '/book', label: 'Book Page', expectText: 'book|schedule|name|email|phone|quote' },
+    { path: '/services', label: 'Services Hub', expectText: 'service|clean|window|price' },
+    { path: '/contact', label: 'Contact Page', expectText: 'contact|phone|email|form|quote' },
+    { path: '/about', label: 'About Page', expectText: 'about|team|story|mission|clean' },
+    { path: '/blog', label: 'Blog Index', expectText: 'blog|post|article|read|category' },
+    { path: '/areas', label: 'Areas Hub', expectText: 'area|city|location|serve|service' },
+  ];
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const base = websiteUrl.replace(/\/+$/, '');
+    const results = [];
+
+    for (const section of PUBLIC_SECTIONS) {
+      console.log(`[public:${businessName}] Testing: ${section.label}`);
+      try {
+        await page.goto(`${base}${section.path}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(3000);
+        const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+        const info = await page.evaluate((expectPattern) => {
+          const body = document.body.innerText || '';
+          const hasContent = body.length > 50;
+          const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(body) : true;
+          const isError = /404|not found|error|something went wrong/i.test(body) && body.length < 500;
+          const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
+          const forms = document.querySelectorAll('form');
+          const images = document.querySelectorAll('img');
+          const links = document.querySelectorAll('a[href]');
+          return { hasContent, hasExpected, isError, counts: { buttons: buttons.length, forms: forms.length, images: images.length, links: links.length } };
+        }, section.expectText).catch(() => ({ hasContent: false, hasExpected: false, isError: true, counts: {} }));
+        const passed = info.hasContent && !info.isError && info.hasExpected;
+        const parts = [];
+        if (info.counts.buttons) parts.push(`${info.counts.buttons} btn`);
+        if (info.counts.forms) parts.push(`${info.counts.forms} form`);
+        if (info.counts.images) parts.push(`${info.counts.images} img`);
+        results.push({ section: section.path, label: section.label, passed, detail: info.isError ? 'Error/404' : parts.join(', ') || 'Content loaded', screenshot: screenshot.toString('base64'), counts: info.counts });
+      } catch (e) {
+        results.push({ section: section.path, label: section.label, passed: false, detail: `Failed: ${e.message.slice(0, 100)}`, screenshot: null });
+      }
+    }
+
+    await browser.close();
+    const passedCount = results.filter(r => r.passed).length;
+    return { passed: passedCount >= Math.ceil(results.length * 0.6), score: `${passedCount}/${results.length}`, results, businessName };
+  } catch (e) {
+    if (browser) await browser.close().catch(() => {});
+    return { error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════
+// CREW PORTAL TEST
+// ═══════════════════════════════════════════
+async function handleCrewTest(data) {
+  const { crewPortalUrl, businessName } = data;
+  if (!crewPortalUrl) return { error: 'Missing crewPortalUrl' };
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const results = [];
+
+    await page.goto(crewPortalUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(5000);
+
+    const mainSs = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+    const portalInfo = await page.evaluate(() => {
+      const body = document.body.innerText || '';
+      const isError = /expired|invalid|not found|404|error|unauthorized/i.test(body) && body.length < 500;
+      const hasSchedule = /schedule|today|job|week|day/i.test(body);
+      const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
+      const hasViewToggle = buttons.some(b => /day|week/i.test(b.textContent));
+      const hasAvailability = buttons.some(b => /availability|time off/i.test(b.textContent));
+      const hasLogout = buttons.some(b => /logout|sign out/i.test(b.textContent));
+      const hasNavigation = buttons.some(b => /prev|next|today|go today/i.test(b.textContent));
+      const jobCards = document.querySelectorAll('[class*="job"], [class*="card"], [class*="appointment"]');
+      return { isError, hasSchedule, hasViewToggle, hasAvailability, hasLogout, hasNavigation, buttonCount: buttons.length, jobCardCount: jobCards.length };
+    }).catch(() => ({ isError: true }));
+
+    results.push({ section: 'crew_main', label: 'Crew Portal Main', passed: !portalInfo.isError && (portalInfo.hasSchedule || portalInfo.buttonCount > 2), detail: portalInfo.isError ? 'Portal error/expired' : `${portalInfo.buttonCount} buttons, ${portalInfo.jobCardCount} job cards`, screenshot: mainSs.toString('base64') });
+    if (!portalInfo.isError) {
+      results.push({ section: 'view_toggle', label: 'Day/Week View Toggle', passed: portalInfo.hasViewToggle, detail: portalInfo.hasViewToggle ? 'Found' : 'Not found', screenshot: null });
+      results.push({ section: 'navigation', label: 'Date Navigation', passed: portalInfo.hasNavigation, detail: portalInfo.hasNavigation ? 'Found' : 'Not found', screenshot: null });
+      results.push({ section: 'availability', label: 'Availability Button', passed: portalInfo.hasAvailability, detail: portalInfo.hasAvailability ? 'Found' : 'Not found', screenshot: null });
+      results.push({ section: 'logout', label: 'Logout Button', passed: portalInfo.hasLogout, detail: portalInfo.hasLogout ? 'Found' : 'Not found', screenshot: null });
+    }
+
+    await browser.close();
+    const passedCount = results.filter(r => r.passed).length;
+    return { passed: passedCount >= Math.ceil(results.length * 0.5), score: `${passedCount}/${results.length}`, results, businessName };
+  } catch (e) {
+    if (browser) await browser.close().catch(() => {});
+    return { error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════
+// CUSTOMER PAGES TEST
+// ═══════════════════════════════════════════
+async function handleCustomerTest(data) {
+  const { quoteUrl, tipUrl, businessName, businessType } = data;
+  if (!quoteUrl && !tipUrl) return { error: 'Missing quoteUrl or tipUrl' };
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const results = [];
+
+    if (quoteUrl) {
+      await page.goto(quoteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForFunction(() => !document.querySelector('.animate-spin') || document.querySelector('[class*="tier"], [class*="quote"]'), { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+      const ss = await page.screenshot({ fullPage: true, type: 'jpeg', quality: 50 });
+      const quoteInfo = await page.evaluate(() => {
+        const body = document.body.innerText || '';
+        const isError = /expired|invalid|not found|404|error/i.test(body) && body.length < 500;
+        const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
+        const tierButtons = buttons.filter(b => /standard|deep|extra|move|good|better|best|select|choose/i.test(b.textContent));
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        const prices = body.match(/\$[\d,.]+/g) || [];
+        const hasSubtotal = /subtotal|total|price|cost/i.test(body);
+        const checkoutBtn = buttons.find(b => /approve|pay|book|checkout|confirm/i.test(b.textContent));
+        const hasPlanSelector = /one-time|biweekly|monthly|membership|plan|frequency/i.test(body);
+        const agreementCb = [...checkboxes].find(cb => /agree|terms|service agreement/i.test(cb.closest('label')?.textContent || cb.parentElement?.textContent || ''));
+        return { isError, tierButtonCount: tierButtons.length, addonCount: checkboxes.length, priceCount: prices.length, prices: prices.slice(0, 5), hasSubtotal, hasCheckoutButton: !!checkoutBtn, hasPlanSelector, hasAgreement: !!agreementCb, buttonCount: buttons.length };
+      }).catch(() => ({ isError: true }));
+      results.push({ section: 'quote_load', label: 'Quote Page Load', passed: !quoteInfo.isError, detail: quoteInfo.isError ? 'Error/expired' : `${quoteInfo.buttonCount} buttons, ${quoteInfo.priceCount} prices`, screenshot: ss.toString('base64') });
+      if (!quoteInfo.isError) {
+        results.push({ section: 'tier_selection', label: 'Tier Selection', passed: quoteInfo.tierButtonCount >= 2, detail: `${quoteInfo.tierButtonCount} tier buttons`, screenshot: null });
+        results.push({ section: 'pricing', label: 'Pricing Display', passed: quoteInfo.priceCount > 0, detail: `${quoteInfo.priceCount} prices: ${quoteInfo.prices.join(', ')}`, screenshot: null });
+        results.push({ section: 'checkout', label: 'Checkout Button', passed: quoteInfo.hasCheckoutButton, detail: quoteInfo.hasCheckoutButton ? 'Found' : 'Not found', screenshot: null });
+        results.push({ section: 'plan_selector', label: 'Plan Selector', passed: quoteInfo.hasPlanSelector, detail: quoteInfo.hasPlanSelector ? 'Found' : 'Not found', screenshot: null });
+        results.push({ section: 'agreement', label: 'Service Agreement', passed: quoteInfo.hasAgreement, detail: quoteInfo.hasAgreement ? 'Found' : 'Not found', screenshot: null });
+      }
+    }
+
+    await browser.close();
+    const passedCount = results.filter(r => r.passed).length;
+    return { passed: passedCount >= Math.ceil(results.length * 0.6), score: `${passedCount}/${results.length}`, results, businessName };
+  } catch (e) {
+    if (browser) await browser.close().catch(() => {});
+    return { error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════
 // HTTP SERVER
 // ═══════════════════════════════════════════
 const server = http.createServer(async (req, res) => {
@@ -580,7 +832,11 @@ const server = http.createServer(async (req, res) => {
       let result;
       if (req.url === '/invoice') result = await handleInvoiceTest(data);
       else if (req.url === '/portal') result = await handlePortalTest(data);
-      else result = { error: 'Unknown endpoint. Use /invoice or /portal' };
+      else if (req.url === '/pages') result = await handlePagesTest(data);
+      else if (req.url === '/public') result = await handlePublicTest(data);
+      else if (req.url === '/crew') result = await handleCrewTest(data);
+      else if (req.url === '/customer') result = await handleCustomerTest(data);
+      else result = { error: 'Unknown endpoint. Use /invoice, /portal, /pages, /public, /crew, or /customer' };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
@@ -594,6 +850,10 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n  Browser test server running at http://localhost:${PORT}`);
   console.log(`  Endpoints:`);
-  console.log(`    POST /invoice  — Invoice/quote page browser test`);
-  console.log(`    POST /portal   — Portal browser test\n`);
+  console.log(`    POST /invoice   — Invoice/quote page browser test`);
+  console.log(`    POST /portal    — Portal browser test`);
+  console.log(`    POST /pages     — Generic pages test (dashboard deep)`);
+  console.log(`    POST /public    — Public marketing pages test`);
+  console.log(`    POST /crew      — Crew portal test`);
+  console.log(`    POST /customer  — Customer quote/tip pages test\n`);
 });

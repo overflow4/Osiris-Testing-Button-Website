@@ -1,0 +1,240 @@
+const { chromium } = require('playwright-core');
+const Browserbase = require('@browserbasehq/sdk').default;
+
+/**
+ * Generic page tester - accepts a batch of sections to test.
+ * Each section: { path, label, expectText, expectElements }
+ * Navigates to each, takes screenshot, checks for expected content/elements.
+ */
+module.exports = async function handler(req, res) {
+  const requestId = Math.random().toString(36).slice(2, 10);
+  console.log(`[browser-pages][${requestId}] Incoming ${req.method}`);
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const { baseUrl, sections, credentials, businessName, loginFirst } = req.body;
+  if (!baseUrl || !sections?.length) return res.status(400).json({ error: 'Missing baseUrl or sections' });
+
+  const apiKey = process.env.BROWSERBASE_API_KEY;
+  if (!apiKey) return res.status(200).json({ error: 'BROWSERBASE_API_KEY not configured' });
+
+  let browser;
+  try {
+    console.log(`[browser-pages][${requestId}] Creating Browserbase session for ${businessName || 'unknown'}...`);
+    const bb = new Browserbase({ apiKey });
+    const session = await bb.sessions.create({
+      projectId: process.env.BROWSERBASE_PROJECT_ID,
+    });
+    console.log(`[browser-pages][${requestId}] Session created: ${session.id}`);
+
+    browser = await chromium.connectOverCDP(session.connectUrl);
+    const context = browser.contexts()[0];
+    const page = context.pages()[0];
+
+    const base = baseUrl.replace(/\/+$/, '');
+    const results = [];
+
+    // Step 1: Login if needed
+    if (loginFirst && credentials?.email) {
+      console.log(`[browser-pages][${requestId}] Attempting login at ${base}...`);
+      await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(5000);
+
+      // Detect login page by URL pattern
+      const currentUrl = page.url();
+      const isLoginPage = /login|signin|sign-in|auth/i.test(currentUrl);
+
+      const hasLoginForm = await page.evaluate(() => {
+        const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[name="username"]');
+        return inputs.length > 0;
+      }).catch(() => false);
+
+      if (hasLoginForm || isLoginPage) {
+        try {
+          // Try filling email/username
+          const emailField = await page.$('input[type="email"], input[name="email"], input[name="username"], input[placeholder*="email" i], input[placeholder*="username" i]');
+          if (emailField) await emailField.fill(credentials.email || '');
+
+          const passField = await page.$('input[type="password"], input[name="password"]');
+          if (passField) await passField.fill(credentials.password || '');
+
+          await page.waitForTimeout(500);
+
+          // Click submit
+          const submitBtn = await page.$('button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("INITIALIZE")');
+          if (submitBtn) {
+            await submitBtn.click();
+            await page.waitForTimeout(6000);
+          }
+
+          // Check for role selection (operator/owner button)
+          const roleBtn = await page.$('button:has-text("Operator"), button:has-text("Owner"), button:has-text("Admin")');
+          if (roleBtn) {
+            await roleBtn.click();
+            await page.waitForTimeout(3000);
+          }
+
+          console.log(`[browser-pages][${requestId}] Login completed, URL: ${page.url()}`);
+        } catch (e) {
+          console.log(`[browser-pages][${requestId}] Login attempt failed: ${e.message}`);
+        }
+      }
+
+      const loginScreenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+      results.push({
+        section: 'login',
+        label: 'Login',
+        passed: !isLoginPage || page.url() !== currentUrl,
+        detail: `After login: ${page.url().slice(0, 80)}`,
+        screenshot: loginScreenshot.toString('base64'),
+      });
+    }
+
+    // Step 2: Test each section
+    for (const section of sections) {
+      const sectionKey = section.key || section.path.replace(/\//g, '_').replace(/^_/, '') || 'root';
+      console.log(`[browser-pages][${requestId}] Testing: ${section.label} (${section.path})`);
+
+      try {
+        const sectionUrl = `${base}${section.path}`;
+        await page.goto(sectionUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(section.waitMs || 4000);
+
+        // Take screenshot (not full page to save bandwidth/time)
+        const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
+
+        // Evaluate the page
+        const info = await page.evaluate((expectPattern, expectElements) => {
+          const bodyText = document.body.innerText || '';
+          const hasContent = bodyText.length > 50;
+          const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(bodyText) : true;
+          const isError = /error|not found|404|500|something went wrong/i.test(bodyText) && bodyText.length < 500;
+          const isLoading = /loading\.\.\.|please wait/i.test(bodyText) && bodyText.length < 200;
+
+          // Count interactive elements
+          const buttons = [...document.querySelectorAll('button:not([disabled])')].filter(b => b.offsetParent !== null);
+          const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea');
+          const links = document.querySelectorAll('a[href]');
+          const tables = document.querySelectorAll('table, [role="grid"], [class*="table"]');
+          const charts = document.querySelectorAll('canvas, svg[class*="chart"], [class*="chart"], [class*="recharts"]');
+          const modals = document.querySelectorAll('[role="dialog"], [class*="modal"], [class*="dialog"]');
+          const toggles = document.querySelectorAll('input[type="checkbox"], input[role="switch"], [class*="switch"], [class*="toggle"]');
+          const tabs = document.querySelectorAll('[role="tab"], [class*="tab"]');
+          const cards = document.querySelectorAll('[class*="card"]');
+          const badges = document.querySelectorAll('[class*="badge"]');
+
+          // Check for specific expected elements
+          let elementResults = {};
+          if (expectElements) {
+            for (const [name, selector] of Object.entries(expectElements)) {
+              const found = document.querySelectorAll(selector);
+              elementResults[name] = { found: found.length, selector };
+            }
+          }
+
+          return {
+            hasContent,
+            hasExpected,
+            isError,
+            isLoading,
+            url: window.location.href,
+            title: document.title,
+            counts: {
+              buttons: buttons.length,
+              inputs: inputs.length,
+              links: links.length,
+              tables: tables.length,
+              charts: charts.length,
+              modals: modals.length,
+              toggles: toggles.length,
+              tabs: tabs.length,
+              cards: cards.length,
+              badges: badges.length,
+            },
+            elementResults,
+            textPreview: bodyText.slice(0, 300),
+          };
+        }, section.expectText || null, section.expectElements || null).catch(() => ({
+          hasContent: false, hasExpected: false, isError: true, isLoading: false,
+          counts: {}, elementResults: {}, textPreview: '',
+        }));
+
+        // Determine pass/fail
+        const passed = info.hasContent && !info.isError && !info.isLoading && info.hasExpected;
+
+        // Build detail string
+        const countParts = [];
+        if (info.counts.buttons) countParts.push(`${info.counts.buttons} btn`);
+        if (info.counts.inputs) countParts.push(`${info.counts.inputs} input`);
+        if (info.counts.tables) countParts.push(`${info.counts.tables} tbl`);
+        if (info.counts.charts) countParts.push(`${info.counts.charts} chart`);
+        if (info.counts.toggles) countParts.push(`${info.counts.toggles} toggle`);
+        if (info.counts.tabs) countParts.push(`${info.counts.tabs} tab`);
+        if (info.counts.cards) countParts.push(`${info.counts.cards} card`);
+        if (info.counts.badges) countParts.push(`${info.counts.badges} badge`);
+
+        let detail = info.isError ? 'Error page' :
+                     info.isLoading ? 'Stuck loading' :
+                     !info.hasContent ? 'Empty page' :
+                     !info.hasExpected ? 'Missing expected content' :
+                     countParts.join(', ') || 'Content loaded';
+
+        // Check expected elements
+        const elementChecks = [];
+        for (const [name, result] of Object.entries(info.elementResults || {})) {
+          elementChecks.push({
+            name,
+            found: result.found,
+            passed: result.found > 0,
+          });
+        }
+
+        results.push({
+          section: sectionKey,
+          label: section.label,
+          passed,
+          detail,
+          screenshot: screenshot.toString('base64'),
+          counts: info.counts,
+          elementChecks,
+          url: info.url,
+        });
+
+      } catch (e) {
+        console.log(`[browser-pages][${requestId}] Section ${section.label} failed: ${e.message}`);
+        results.push({
+          section: sectionKey,
+          label: section.label,
+          passed: false,
+          detail: `Navigation failed: ${e.message.slice(0, 100)}`,
+          screenshot: null,
+          counts: {},
+          elementChecks: [],
+        });
+      }
+    }
+
+    await page.close();
+    await browser.close();
+
+    const passedCount = results.filter(r => r.passed).length;
+    const totalCount = results.length;
+
+    return res.status(200).json({
+      passed: passedCount >= Math.ceil(totalCount * 0.7),
+      score: `${passedCount}/${totalCount}`,
+      results,
+      businessName,
+    });
+
+  } catch (e) {
+    console.error(`[browser-pages][${requestId}] FAILED:`, e.message);
+    if (browser) await browser.close().catch(() => {});
+    return res.status(200).json({ error: e.message });
+  }
+};
