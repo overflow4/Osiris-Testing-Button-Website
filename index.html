@@ -203,6 +203,11 @@
     .section-result .dot.pass{background:var(--green);} .section-result .dot.fail{background:var(--red);}
     .screenshot-modal{position:fixed;inset:0;background:#000000dd;z-index:300;display:flex;align-items:center;justify-content:center;cursor:pointer;}
     .screenshot-modal img{max-width:90vw;max-height:90vh;border-radius:8px;}
+    .diag-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:1rem;overflow:hidden;}
+    .diag-header{display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.8rem;border-bottom:1px solid var(--border);background:var(--surface-2);}
+    .diag-header span{font-size:0.75rem;font-weight:600;color:var(--text-dim);}
+    .diag-copy{background:none;border:none;color:var(--text-dim);cursor:pointer;padding:0.2rem;border-radius:4px;transition:color 0.15s;font-size:0.85rem;} .diag-copy:hover{color:var(--text);} .diag-copy.copied{color:var(--green);}
+    .diag-body{padding:0.6rem 0.8rem;font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--text-dim);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;line-height:1.5;}
 
     .checks{padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;}
     .checks h4{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.35rem;}
@@ -331,6 +336,14 @@
       <div class="screenshot-gallery" id="portalScreenshots"></div>
       <div class="checks" id="chkPortal" style="display:none;"></div>
     </div>
+  </div>
+
+  <div id="diagBox" style="display:none;" class="diag-box">
+    <div class="diag-header">
+      <span>Diagnostic Prompt</span>
+      <button class="diag-copy" id="diagCopyBtn" onclick="copyDiagPrompt(this)">&#128203;</button>
+    </div>
+    <div class="diag-body" id="diagBody"></div>
   </div>
 </div>
 
@@ -616,6 +629,68 @@
     navigator.clipboard.writeText(text).then(() => flashCopied(btn));
   }
 
+  function generateDiagPrompt(bizName, results) {
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal'];
+    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Invoice Browser', portal: 'Portal' };
+
+    // Collect failures
+    const failures = [];
+    for (const [key, label] of Object.entries(testNames)) {
+      if (results[key] === 'FAIL' || results[key] === 'ERROR') {
+        failures.push(label);
+      }
+    }
+
+    if (failures.length === 0) return null;
+
+    // Build detailed logs of failed tests only
+    const panelLogs = panels.map(p => formatPanelText(p)).join('\n\n');
+
+    const prompt = `You are debugging the Osiris business automation system for "${bizName}". An automated E2E test suite just ran and found the following failures. Diagnose each issue and provide specific fixes.
+
+## Test Run: ${new Date().toISOString()}
+## Business: ${bizName}
+## Results: ${Object.entries(testNames).map(([k, v]) => `${v}=${results[k] || 'N/A'}`).join(', ')}
+## Failed Tests: ${failures.join(', ')}
+
+## Full Test Logs
+
+${panelLogs}
+
+## Instructions
+
+For each failure above:
+1. Identify the root cause from the test logs
+2. Specify which file(s) and function(s) need to be changed
+3. Provide the exact code fix
+4. Explain why the fix resolves the issue
+
+Focus only on the failures — do not comment on passing tests. Be specific with file paths and code changes.`;
+
+    return prompt;
+  }
+
+  function showDiagBox(bizName, results) {
+    const prompt = generateDiagPrompt(bizName, results);
+    const box = document.getElementById('diagBox');
+    const body = document.getElementById('diagBody');
+    if (!prompt) {
+      box.style.display = 'none';
+      return;
+    }
+    body.textContent = prompt;
+    box.style.display = 'block';
+  }
+
+  function copyDiagPrompt(btn) {
+    const text = document.getElementById('diagBody').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.innerHTML = '&#10003;';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = '&#128203;'; btn.classList.remove('copied'); }, 1500);
+    });
+  }
+
   function showChecks(id, items) {
     const el = document.getElementById(id); el.style.display = 'block';
     let h = '<h4>Evaluation</h4>';
@@ -756,6 +831,7 @@
     document.getElementById('audioRow').style.display = 'none';
     document.getElementById('invScreenshots').innerHTML = '';
     document.getElementById('portalScreenshots').innerHTML = '';
+    document.getElementById('diagBox').style.display = 'none';
   }
 
   // ── Data Reset ──
@@ -1453,7 +1529,11 @@
         document.getElementById('portalScreenshots').innerHTML = '';
         const portal = await testPortal(biz);
 
-        allResults.push({ name: biz.name, voice, sms, web, email, invoiceBrowser, portal });
+        const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal };
+        allResults.push(bizResults);
+
+        // Show diagnostic prompt if any test failed
+        showDiagBox(biz.name, bizResults);
       }
     } catch (e) {
       if (e.message === '__STOPPED__') {
