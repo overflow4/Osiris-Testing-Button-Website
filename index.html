@@ -206,7 +206,13 @@
     .diag-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:1rem;overflow:hidden;}
     .diag-header{display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.8rem;border-bottom:1px solid var(--border);background:var(--surface-2);}
     .diag-header span{font-size:0.75rem;font-weight:600;color:var(--text-dim);}
-    .diag-copy{background:none;border:none;color:var(--text-dim);cursor:pointer;padding:0.2rem;border-radius:4px;transition:color 0.15s;font-size:0.85rem;} .diag-copy:hover{color:var(--text);} .diag-copy.copied{color:var(--green);}
+    .diag-copy{background:none;border:none;color:var(--text-dim);cursor:pointer;padding:0.3rem;border-radius:4px;transition:color 0.2s;display:flex;align-items:center;justify-content:center;width:28px;height:28px;} .diag-copy:hover{color:var(--text);}
+    .diag-copy svg{width:16px;height:16px;transition:opacity 0.2s,transform 0.2s;}
+    .diag-copy .icon-check{position:absolute;opacity:0;transform:scale(0.5);color:var(--green);}
+    .diag-copy.copied .icon-copy{opacity:0;transform:scale(0.5);}
+    .diag-copy.copied .icon-check{opacity:1;transform:scale(1);}
+    @keyframes checkDraw{0%{stroke-dashoffset:20;}100%{stroke-dashoffset:0;}}
+    .diag-copy.copied .icon-check path{stroke-dasharray:20;animation:checkDraw 0.35s ease-out forwards;}
     .diag-body{padding:0.6rem 0.8rem;font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--text-dim);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;line-height:1.5;}
 
     .checks{padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;}
@@ -341,7 +347,7 @@
   <div id="diagBox" style="display:none;" class="diag-box">
     <div class="diag-header">
       <span>Diagnostic Prompt</span>
-      <button class="diag-copy" id="diagCopyBtn" onclick="copyDiagPrompt(this)">&#128203;</button>
+      <button class="diag-copy" id="diagCopyBtn" onclick="copyDiagPrompt(this)" style="position:relative;"><svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></button>
     </div>
     <div class="diag-body" id="diagBody"></div>
   </div>
@@ -685,9 +691,8 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   function copyDiagPrompt(btn) {
     const text = document.getElementById('diagBody').textContent;
     navigator.clipboard.writeText(text).then(() => {
-      btn.innerHTML = '&#10003;';
       btn.classList.add('copied');
-      setTimeout(() => { btn.innerHTML = '&#128203;'; btn.classList.remove('copied'); }, 1500);
+      setTimeout(() => { btn.classList.remove('copied'); }, 2000);
     });
   }
 
