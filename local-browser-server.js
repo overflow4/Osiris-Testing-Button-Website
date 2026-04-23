@@ -131,24 +131,71 @@ async function handleInvoiceTest(body) {
       const text = await btn.textContent().catch(() => '');
       if (/book|pay|checkout|approve|confirm|submit|continue/i.test(text)) {
         try {
-          // Check required checkboxes first
+          // Check all checkboxes, toggle switches, and service agreement elements
           const checkboxes = await page.$$('input[type="checkbox"]:not(:checked)');
           for (const cb of checkboxes) await cb.click().catch(() => {});
-          await page.waitForTimeout(500);
 
-          await btn.click();
-          clickedCheckout = true;
-          console.log(`[invoice] Clicked checkout: "${text.trim().slice(0, 30)}"`);
-
-          try {
-            await page.waitForURL(/stripe\.com|checkout/i, { timeout: 15000 });
-            stripeRedirect = true;
-          } catch (e) {
-            if (/stripe|checkout/i.test(page.url())) stripeRedirect = true;
+          // Also click any labels/elements containing "agree", "terms", "service agreement"
+          const agreeEls = await page.$$('label, div, span, button');
+          for (const el of agreeEls) {
+            const elText = await el.textContent().catch(() => '');
+            if (/i agree|accept|terms|service agreement|acknowledge/i.test(elText) && elText.length < 200) {
+              const isCheckbox = await el.evaluate(e => e.querySelector('input[type="checkbox"]') !== null).catch(() => false);
+              if (isCheckbox) {
+                const cb = await el.$('input[type="checkbox"]');
+                const checked = cb ? await cb.isChecked().catch(() => false) : false;
+                if (!checked) await el.click().catch(() => {});
+              } else {
+                // Could be a custom toggle or clickable agreement text
+                await el.click().catch(() => {});
+              }
+              console.log(`[invoice] Clicked agreement: "${elText.trim().slice(0, 40)}"`);
+            }
           }
-          console.log(`[invoice] After checkout URL: ${page.url()}`);
+
+          // Also handle switch/toggle components (common in React UIs)
+          const switches = await page.$$('[role="switch"][aria-checked="false"], [role="checkbox"][aria-checked="false"]');
+          for (const sw of switches) await sw.click().catch(() => {});
+
+          await page.waitForTimeout(1000);
+
+          // Check if the checkout button is now enabled (it might have been disabled before agreement)
+          const btnStillDisabled = await btn.evaluate(el => el.disabled).catch(() => false);
+          if (btnStillDisabled) {
+            console.log('[invoice] Checkout button still disabled after agreements — looking for another');
+            // Re-scan for enabled checkout buttons
+            const retryBtns = await page.$$('button:not([disabled])');
+            for (const rb of retryBtns) {
+              const rt = await rb.textContent().catch(() => '');
+              if (/book|pay|checkout|approve|confirm|submit|continue/i.test(rt)) {
+                await rb.click();
+                clickedCheckout = true;
+                console.log(`[invoice] Clicked enabled checkout: "${rt.trim().slice(0, 30)}"`);
+                break;
+              }
+            }
+          } else {
+            await btn.click();
+            clickedCheckout = true;
+            console.log(`[invoice] Clicked checkout: "${text.trim().slice(0, 30)}"`);
+          }
+
+          if (clickedCheckout) {
+            // Wait longer for Stripe redirect — page may process payment session first
+            try {
+              await page.waitForURL(/stripe\.com|checkout/i, { timeout: 20000 });
+              stripeRedirect = true;
+            } catch (e) {
+              // Check current URL and also wait a bit more
+              await page.waitForTimeout(3000);
+              if (/stripe|checkout/i.test(page.url())) stripeRedirect = true;
+            }
+            console.log(`[invoice] After checkout URL: ${page.url()}`);
+          }
           break;
-        } catch (e) {}
+        } catch (e) {
+          console.log(`[invoice] Checkout attempt failed: ${e.message}`);
+        }
       }
     }
     checks.push({ t: 'Checkout button clickable', s: clickedCheckout, d: clickedCheckout ? 'Clicked' : 'Not found' });
