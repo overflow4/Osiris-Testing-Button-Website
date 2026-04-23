@@ -1208,7 +1208,13 @@
     const item = document.createElement('div');
     item.className = 'screenshot-item';
     const src = `data:image/jpeg;base64,${b64}`;
-    item.innerHTML = `<div class="screenshot-label">${label}</div><img src="${src}" onclick="showScreenshotModal('${src}')">`;
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'screenshot-label';
+    labelDiv.textContent = label;
+    const img = document.createElement('img');
+    img.src = src;
+    img.addEventListener('click', () => showScreenshotModal(src));
+    item.append(labelDiv, img);
     gallery.appendChild(item);
   }
 
@@ -1221,7 +1227,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(300000),
       });
       const data = await localRes.json();
       if (!data.error) return { data, source: 'local' };

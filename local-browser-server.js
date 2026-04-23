@@ -216,7 +216,8 @@ async function handlePortalTest(body) {
     }).catch(() => false);
 
     let loggedIn = !hasLoginForm;
-    if (hasLoginForm && credentials) {
+    const hasCredentials = credentials && credentials.email && credentials.password;
+    if (hasLoginForm && hasCredentials) {
       console.log(`[portal:${businessName}] Logging in with ${credentials.email}...`);
       try {
         const emailField = await page.$('input[type="email"], input[name="email"], input[placeholder*="email" i]');
@@ -232,7 +233,7 @@ async function handlePortalTest(body) {
     results.push({
       section: 'login', label: 'Portal Login',
       passed: loggedIn,
-      detail: hasLoginForm ? (loggedIn ? 'Logged in successfully' : 'Login failed — credentials may be needed') : 'No login required',
+      detail: hasLoginForm ? (loggedIn ? 'Logged in successfully' : (!hasCredentials ? 'Login form found but no credentials configured — add portal email/password in business settings' : 'Login failed — check credentials')) : 'No login required',
       screenshot: loginSs.data,
     });
 
