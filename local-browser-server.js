@@ -255,25 +255,93 @@ async function handlePortalTest(body) {
     // Step 1: Navigate to portal
     console.log(`[portal:${businessName}] Opening ${baseUrl}`);
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(5000);
 
-    // Step 2: Login
+    // Wait for client-side rendering (React apps show loading spinner first)
+    console.log(`[portal:${businessName}] Waiting for page to render...`);
+    await page.waitForFunction(() => {
+      const body = document.body?.innerText || '';
+      // Wait until we see either a login form, dashboard content, or navigation
+      return body.length > 200 ||
+        document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"]').length > 0 ||
+        document.querySelectorAll('nav a, aside a').length > 0;
+    }, { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+
+    // Step 2: Login — check URL for login redirect AND check for form elements
+    const currentUrl = page.url();
+    const isLoginPage = /login|signin|sign-in|auth/i.test(currentUrl);
     const hasLoginForm = await page.evaluate(() => {
-      return document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"]').length > 0;
+      return document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[placeholder*="email" i], input[placeholder*="password" i]').length > 0;
     }).catch(() => false);
+    const needsLogin = hasLoginForm || isLoginPage;
+    console.log(`[portal:${businessName}] Login page: ${isLoginPage}, Login form: ${hasLoginForm}, URL: ${currentUrl}`);
 
-    let loggedIn = !hasLoginForm;
+    let loggedIn = !needsLogin;
     const hasCredentials = credentials && credentials.email && credentials.password;
-    if (hasLoginForm && hasCredentials) {
+
+    if (needsLogin && hasCredentials) {
+      // If we were redirected to a login URL but form hasn't loaded, go there explicitly
+      if (!hasLoginForm && isLoginPage) {
+        await page.waitForTimeout(3000);
+      }
+      // If still no form, try navigating to /login directly
+      if (!hasLoginForm) {
+        console.log(`[portal:${businessName}] Navigating to login page directly...`);
+        await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+        await page.waitForFunction(() => {
+          return document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[placeholder*="email" i]').length > 0;
+        }, { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(2000);
+      }
+
       console.log(`[portal:${businessName}] Logging in with ${credentials.email}...`);
       try {
-        const emailField = await page.$('input[type="email"], input[name="email"], input[placeholder*="email" i]');
-        if (emailField) await emailField.fill(credentials.email || '');
-        const passField = await page.$('input[type="password"], input[name="password"]');
-        if (passField) await passField.fill(credentials.password || '');
-        const submitBtn = await page.$('button[type="submit"]');
-        if (submitBtn) { await submitBtn.click(); await page.waitForTimeout(5000); loggedIn = true; }
+        // Try multiple selectors for email field
+        const emailField = await page.$('input[type="email"]')
+          || await page.$('input[name="email"]')
+          || await page.$('input[placeholder*="email" i]')
+          || await page.$('input[type="text"]');
+        if (emailField) {
+          await emailField.click();
+          await emailField.fill(credentials.email);
+          console.log(`[portal:${businessName}] Filled email field`);
+        }
+
+        const passField = await page.$('input[type="password"]')
+          || await page.$('input[name="password"]')
+          || await page.$('input[placeholder*="password" i]');
+        if (passField) {
+          await passField.click();
+          await passField.fill(credentials.password);
+          console.log(`[portal:${businessName}] Filled password field`);
+        }
+
+        // Try multiple selectors for submit button
+        const submitBtn = await page.$('button[type="submit"]')
+          || await page.$('button:has-text("Log in")')
+          || await page.$('button:has-text("Sign in")')
+          || await page.$('button:has-text("Login")')
+          || await page.$('button:has-text("Continue")');
+        if (submitBtn) {
+          await submitBtn.click();
+          console.log(`[portal:${businessName}] Clicked submit button`);
+          // Wait for navigation after login
+          await page.waitForURL(url => !/login|signin|auth/i.test(url), { timeout: 15000 }).catch(() => {});
+          await page.waitForTimeout(3000);
+          // Check if we're still on login page
+          const afterLoginUrl = page.url();
+          loggedIn = !/login|signin|auth/i.test(afterLoginUrl);
+          console.log(`[portal:${businessName}] After login URL: ${afterLoginUrl}, logged in: ${loggedIn}`);
+        } else {
+          console.log(`[portal:${businessName}] No submit button found`);
+          // Try pressing Enter
+          if (passField) { await passField.press('Enter'); await page.waitForTimeout(5000); }
+          const afterLoginUrl = page.url();
+          loggedIn = !/login|signin|auth/i.test(afterLoginUrl);
+        }
       } catch (e) { console.log(`[portal:${businessName}] Login failed: ${e.message}`); }
+    } else if (needsLogin && !hasCredentials) {
+      console.log(`[portal:${businessName}] Login required but no credentials configured`);
     }
 
     const loginSs = await takeScreenshot(page, 'Login / Landing');
