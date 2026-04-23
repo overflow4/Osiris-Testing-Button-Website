@@ -344,6 +344,8 @@
     <label><span class="lbl">SMS Phone Number (for text messaging)</span><input type="text" id="inSms" placeholder="+17479663565"></label>
     <label><span class="lbl">Website URL (for form submissions)</span><input type="text" id="inWeb" placeholder="https://example.com/contact"></label>
     <label><span class="lbl">Email Address (for email testing)</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
+    <label><span class="lbl">Portal Login Email (for portal testing)</span><input type="text" id="inPortalEmail" placeholder="admin@business.com"></label>
+    <label><span class="lbl">Portal Login Password</span><input type="password" id="inPortalPass" placeholder="portal password"></label>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-accent" id="modalSaveBtn" onclick="saveBiz()">Add Business</button>
@@ -704,6 +706,8 @@
     document.getElementById('inSms').value = b.sms || '';
     document.getElementById('inWeb').value = b.web || '';
     document.getElementById('inEmail').value = b.email || '';
+    document.getElementById('inPortalEmail').value = b.portalCredentials?.email || '';
+    document.getElementById('inPortalPass').value = b.portalCredentials?.password || '';
     document.getElementById('modalTitle').textContent = 'Edit Business';
     document.getElementById('modalSaveBtn').textContent = 'Save Changes';
     document.getElementById('modalOverlay').classList.add('open');
@@ -713,7 +717,7 @@
   function closeModal() {
     editingBizIdx = -1;
     document.getElementById('modalOverlay').classList.remove('open');
-    ['inBizName','inVapi','inSms','inWeb','inEmail'].forEach(id => document.getElementById(id).value = '');
+    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inBizType').selectedIndex = 0;
   }
 
@@ -727,6 +731,10 @@
       sms: document.getElementById('inSms').value.trim(),
       web: document.getElementById('inWeb').value.trim(),
       email: document.getElementById('inEmail').value.trim(),
+      portalCredentials: {
+        email: document.getElementById('inPortalEmail').value.trim(),
+        password: document.getElementById('inPortalPass').value.trim(),
+      },
     };
     if (editingBizIdx >= 0) {
       data.checked = businesses[editingBizIdx].checked;
@@ -1257,6 +1265,15 @@
       checks.forEach(c => {
         addSys('tInvoiceBrowser', `${c.s ? '✓' : '✗'} ${c.t}: ${c.d || ''}`, c.s ? 'sys-ok' : 'sys-err');
       });
+
+      // Display per-button results
+      if (data.buttonResults?.length) {
+        addPhase('tInvoiceBrowser', 'Button Test Results');
+        data.buttonResults.forEach(r => {
+          addSys('tInvoiceBrowser', `${r.clickable ? '✓' : '✗'} "${r.button}" — ${r.clickable ? (r.error ? 'clicked but caused error' : 'OK') : 'not clickable'}`, r.clickable && !r.error ? 'sys-ok' : 'sys-err');
+        });
+      }
+
       showChecks('chkInvoiceBrowser', checks.map(c => ({ t: c.t, s: c.s })));
 
       // Display screenshots
@@ -1309,7 +1326,11 @@
         addPhase('tPortal', section.label);
         addSys('tPortal', `${section.passed ? '✓' : '✗'} ${section.detail}`, section.passed ? 'sys-ok' : 'sys-err');
 
-        if (section.clickResults?.length) {
+        if (section.buttonResults?.length) {
+          section.buttonResults.forEach(r => {
+            addSys('tPortal', `  Button "${r.button}": ${r.clickable ? (r.error ? 'clicked but error' : 'OK') : 'not clickable'}`, r.clickable && !r.error ? 'sys-ok' : 'sys-err');
+          });
+        } else if (section.clickResults?.length) {
           section.clickResults.forEach(cr => {
             addSys('tPortal', `  Button "${cr.button}": ${cr.worked ? 'OK' : 'Failed'}`, cr.worked ? 'sys-ok' : 'sys-err');
           });
@@ -1318,6 +1339,12 @@
         if (section.screenshot) {
           addScreenshot('portalScreenshots', section.screenshot, section.label);
           screenCount++;
+        }
+
+        if (section.extraScreenshots?.length) {
+          section.extraScreenshots.forEach(ss => {
+            if (ss?.data) { addScreenshot('portalScreenshots', ss.data, ss.label); screenCount++; }
+          });
         }
       });
 
