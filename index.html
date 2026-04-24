@@ -483,8 +483,8 @@
     <label><span class="lbl">SMS Phone Number (for text messaging)</span><input type="text" id="inSms" placeholder="+17479663565"></label>
     <label><span class="lbl">Website URL (for form submissions)</span><input type="text" id="inWeb" placeholder="https://example.com/contact"></label>
     <label><span class="lbl">Email Address (for email testing)</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
-    <label><span class="lbl">Portal Login Email (for portal testing)</span><input type="text" id="inPortalEmail" placeholder="admin@business.com"></label>
-    <label><span class="lbl">Portal Login Password</span><input type="password" id="inPortalPass" placeholder="portal password"></label>
+    <label><span class="lbl">Portal Login Username (blank = admin)</span><input type="text" id="inPortalEmail" placeholder="admin"></label>
+    <label><span class="lbl">Portal Login Password (blank = password)</span><input type="password" id="inPortalPass" placeholder="password"></label>
     <label><span class="lbl">Public Website URL (for marketing pages)</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
     <label><span class="lbl">Crew Portal URL (token auth)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live/crew/TOKEN"></label>
     <label><span class="lbl">API Base URL</span><input type="text" id="inApiUrl" placeholder="https://cleanmachine.live"></label>
@@ -1459,7 +1459,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     }
     // Fall back to Vercel API only if local server is truly unreachable
     console.log('Local server unreachable after 3 attempts, trying Vercel cloud...');
-    const apiMap = { '/invoice': '/api/browser-test?type=invoice', '/portal': '/api/browser-test?type=portal', '/pages': '/api/browser-test?type=pages', '/public': '/api/browser-test?type=public', '/crew': '/api/browser-test?type=crew', '/customer': '/api/browser-test?type=customer', '/interactive': '/api/browser-test?type=interactive' };
+    const apiMap = { '/invoice': '/api/browser-test?type=invoice', '/portal': '/api/browser-test?type=portal', '/pages': '/api/browser-test?type=pages', '/public': '/api/browser-test?type=public', '/crew': '/api/browser-test?type=crew', '/customer': '/api/browser-test?type=customer', '/interactive': '/api/browser-test?type=interactive', '/crewflow': '/api/browser-test?type=crewflow' };
     const r = await fetch(apiMap[endpoint] || endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1809,11 +1809,36 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         if (r.screenshot) addScreenshot('crewScreenshots', r.screenshot, r.label);
       });
 
-      showChecks('chkCrew', results.map(r => ({ t: r.label, s: r.passed })));
-      document.getElementById('mCrewScore').textContent = data.score || '--';
-      document.getElementById('mCrewItems').textContent = results.length;
-      setBadge('badgeCrew', data.passed ? 'pass' : 'fail', data.score || '0/0');
-      return data.passed ? 'PASS' : 'FAIL';
+      // Chain in the deep crew job execution flow test
+      addPhase('tCrew', 'Crew Job Execution Flow');
+      addSys('tCrew', 'Running deep crew flow test...');
+      let flowResults = [];
+      try {
+        const flowResp = await browserFetch('/crewflow', {
+          crewPortalUrl: biz.crewUrl,
+          businessName: biz.name,
+        });
+        if (flowResp.data.error) {
+          addSys('tCrew', `Crew flow error: ${flowResp.data.error}`, 'sys-err');
+        } else {
+          flowResults = flowResp.data.results || [];
+          flowResults.forEach(r => {
+            addSys('tCrew', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
+            if (r.screenshot) addScreenshot('crewScreenshots', r.screenshot, r.label);
+          });
+        }
+      } catch (e) {
+        addSys('tCrew', `Crew flow failed: ${e.message}`, 'sys-err');
+      }
+
+      const allResults = [...results, ...flowResults];
+      const passedCount = allResults.filter(r => r.passed).length;
+      showChecks('chkCrew', allResults.map(r => ({ t: r.label, s: r.passed })));
+      document.getElementById('mCrewScore').textContent = `${passedCount}/${allResults.length}`;
+      document.getElementById('mCrewItems').textContent = allResults.length;
+      const pctPass = allResults.length > 0 && passedCount / allResults.length >= 0.5;
+      setBadge('badgeCrew', pctPass ? 'pass' : 'fail', `${passedCount}/${allResults.length}`);
+      return pctPass ? 'PASS' : 'FAIL';
 
     } catch (e) {
       if (e.message === '__STOPPED__') throw e;

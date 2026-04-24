@@ -7,6 +7,7 @@ const handlers = {
   crew: require('../lib/browser-test-crew'),
   customer: require('../lib/browser-test-customer'),
   interactive: require('../lib/browser-test-interactive'),
+  crewflow: require('../lib/browser-test-crew-flow'),
 };
 
 module.exports = async function handler(req, res) {
