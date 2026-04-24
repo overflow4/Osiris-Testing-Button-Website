@@ -38,12 +38,12 @@ ${invoiceHtml || 'No invoice HTML available.'}
 ## Your Task
 Analyze the invoice page and the interaction that led to it. Check for:
 
-1. **Price present** — Is there a clear price/quote amount displayed?
-2. **Price consistency** — Does the price on the invoice match what was quoted during the conversation? Flag any discrepancy.
-3. **Customer info** — Is the customer name, phone, address, or service type shown? Does it match what was discussed?
+1. **Price present** — Is there a clear price/quote amount in the data?
+2. **Price consistency** — Does the price on the invoice roughly match what was quoted during the conversation? Allow $1-2 rounding differences (e.g., $362.50 vs $363 should PASS — that's just verbal rounding). Only fail if the discrepancy is significant (>$5 or wildly different).
+3. **Customer info** — Is the customer name, phone, address, or service type captured? Does it match what was discussed?
 4. **Service details** — Does the service description match what was requested (e.g., standard cleaning, 3 bed 2 bath, exterior windows, etc.)?
-5. **Visual/content issues** — Any broken elements, missing data, placeholder text, error messages, or obvious glitches visible in the HTML?
-6. **Booking/payment flow** — Is there a clear way for the customer to book or pay (date picker, payment button, etc.)?
+5. **Visual/content issues** — Any obviously broken data, placeholder text, error messages, or missing critical fields?
+6. **Booking/payment flow** — Does the quote data include the elements needed for booking (tier options, valid_until date, payment-ready status)? **NOTE:** This data comes from the QUOTE API, not rendered HTML — the actual booking UI (date picker, payment button) is rendered client-side and is verified separately by the Invoice Browser Test. So PASS this check if the quote data shows tiers, status, and is structurally complete enough to book from.
 
 Respond with ONLY valid JSON in this exact format:
 {
