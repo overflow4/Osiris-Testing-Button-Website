@@ -6,6 +6,7 @@ const handlers = {
   public: require('../lib/browser-test-public'),
   crew: require('../lib/browser-test-crew'),
   customer: require('../lib/browser-test-customer'),
+  interactive: require('../lib/browser-test-interactive'),
 };
 
 module.exports = async function handler(req, res) {

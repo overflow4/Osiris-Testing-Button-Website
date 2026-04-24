@@ -44,14 +44,31 @@ module.exports = async function handler(req, res) {
         if (responseBody.length > 500) responseBody = responseBody.slice(0, 500) + '...';
       } catch (e) {}
 
-      // Determine pass criteria
+      // Determine pass criteria:
+      // - 2xx/3xx = success
+      // - 400 = endpoint exists, payload validation firing (good for webhooks)
+      // - 401/403 = endpoint exists but protected (good for crons)
+      // - 405 = wrong method but endpoint exists
+      // - 404/5xx = BAD (missing or broken)
+      const ACCEPTED = new Set([400, 401, 403, 405]);
       const statusOk = ep.expectStatus
         ? r.status === ep.expectStatus
-        : r.status >= 200 && r.status < 500; // 4xx can be OK for auth-protected endpoints
+        : (r.status >= 200 && r.status < 400) || ACCEPTED.has(r.status);
 
       const bodyOk = ep.expectBody
         ? new RegExp(ep.expectBody, 'i').test(responseBody)
         : true;
+
+      // Annotate status meaning for UI
+      let statusMeaning = '';
+      if (r.status >= 200 && r.status < 300) statusMeaning = 'OK';
+      else if (r.status >= 300 && r.status < 400) statusMeaning = 'redirect';
+      else if (r.status === 400) statusMeaning = 'validation (alive)';
+      else if (r.status === 401 || r.status === 403) statusMeaning = 'protected (alive)';
+      else if (r.status === 404) statusMeaning = 'NOT FOUND';
+      else if (r.status === 405) statusMeaning = 'method not allowed';
+      else if (r.status >= 500) statusMeaning = 'SERVER ERROR';
+      else statusMeaning = `status ${r.status}`;
 
       results.push({
         path: ep.path,
@@ -61,7 +78,7 @@ module.exports = async function handler(req, res) {
         status: r.status,
         elapsed,
         passed: statusOk && bodyOk,
-        detail: `HTTP ${r.status} (${elapsed}ms)`,
+        detail: `HTTP ${r.status} ${statusMeaning} (${elapsed}ms)`,
         responsePreview: responseBody.slice(0, 200),
       });
 

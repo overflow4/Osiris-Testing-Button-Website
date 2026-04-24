@@ -575,35 +575,33 @@ async function handlePagesTest(data) {
     const base = baseUrl.replace(/\/+$/, '');
     const results = [];
 
-    // Login if needed
+    // Login if needed (Osiris flow: role → credentials → INITIALIZE)
     if (loginFirst && credentials?.email) {
       console.log(`[pages:${businessName}] Logging in at ${base}...`);
       await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(5000);
 
-      const currentUrl = page.url();
-      const isLoginPage = /login|signin|sign-in|auth/i.test(currentUrl);
-      const hasLoginForm = await page.evaluate(() => {
-        const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[name="username"]');
-        return inputs.length > 0;
-      }).catch(() => false);
+      try {
+        // Phase A: role button FIRST
+        const roleBtn = await page.$('button:has-text("Operator"), button:has-text("Owner"), button:has-text("Admin"), button:has-text("Staff")');
+        if (roleBtn) { await roleBtn.click(); await page.waitForTimeout(2500); }
 
-      if (hasLoginForm || isLoginPage) {
-        try {
-          const emailField = await page.$('input[type="email"], input[name="email"], input[name="username"], input[placeholder*="email" i], input[placeholder*="username" i]');
+        // Phase B: credentials
+        const hasPassword = await page.$('input[type="password"]');
+        if (hasPassword) {
+          const emailField = await page.$('input[type="email"], input[name="email"], input[name="username"], input[placeholder*="email" i], input[placeholder*="username" i], input:not([type="password"]):not([type="hidden"]):not([type="checkbox"])');
           if (emailField) await emailField.fill(credentials.email || '');
-          const passField = await page.$('input[type="password"], input[name="password"]');
-          if (passField) await passField.fill(credentials.password || '');
+          await hasPassword.fill(credentials.password || '');
           await page.waitForTimeout(500);
-          const submitBtn = await page.$('button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("INITIALIZE")');
+          const submitBtn = await page.$('button:has-text("INITIALIZE"), button:has-text("Sign In"), button:has-text("Log In"), button[type="submit"]');
           if (submitBtn) { await submitBtn.click(); await page.waitForTimeout(6000); }
-          const roleBtn = await page.$('button:has-text("Operator"), button:has-text("Owner"), button:has-text("Admin")');
-          if (roleBtn) { await roleBtn.click(); await page.waitForTimeout(3000); }
-        } catch (e) { console.log(`[pages:${businessName}] Login failed: ${e.message}`); }
-      }
+        }
+      } catch (e) { console.log(`[pages:${businessName}] Login failed: ${e.message}`); }
 
+      const endUrl = page.url();
+      const stillOnLogin = /login|signin|sign-in|auth/i.test(endUrl);
       const loginSs = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
-      results.push({ section: 'login', label: 'Login', passed: !isLoginPage || page.url() !== currentUrl, detail: `After login: ${page.url().slice(0, 80)}`, screenshot: loginSs.toString('base64') });
+      results.push({ section: 'login', label: 'Login', passed: !stillOnLogin, detail: stillOnLogin ? `Stuck on login` : `Logged in → ${endUrl.slice(0, 80)}`, screenshot: loginSs.toString('base64') });
     }
 
     // Test each section
@@ -616,10 +614,11 @@ async function handlePagesTest(data) {
         const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
         const info = await page.evaluate((expectPattern) => {
           const bodyText = document.body.innerText || '';
+          const trimmed = bodyText.trim();
           const hasContent = bodyText.length > 50;
           const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(bodyText) : true;
-          const isError = /error|not found|404|500|something went wrong/i.test(bodyText) && bodyText.length < 500;
-          const isLoading = /loading\.\.\.|please wait/i.test(bodyText) && bodyText.length < 200;
+          const isError = trimmed.length < 400 && /^\s*(404|500|error|oops|not found|something went wrong|unauthorized|forbidden|page not found)/i.test(trimmed);
+          const isLoading = bodyText.length < 200 && /loading\.\.\.|please wait/i.test(bodyText);
           const buttons = [...document.querySelectorAll('button:not([disabled])')].filter(b => b.offsetParent !== null);
           const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea');
           const tables = document.querySelectorAll('table, [role="grid"], [class*="table"]');
@@ -687,9 +686,10 @@ async function handlePublicTest(data) {
         const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
         const info = await page.evaluate((expectPattern) => {
           const body = document.body.innerText || '';
+          const trimmed = body.trim();
           const hasContent = body.length > 50;
           const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(body) : true;
-          const isError = /404|not found|error|something went wrong/i.test(body) && body.length < 500;
+          const isError = trimmed.length < 400 && /^\s*(404|500|error|oops|not found|something went wrong|unauthorized|forbidden|page not found)/i.test(trimmed);
           const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
           const forms = document.querySelectorAll('form');
           const images = document.querySelectorAll('img');
@@ -735,7 +735,8 @@ async function handleCrewTest(data) {
     const mainSs = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
     const portalInfo = await page.evaluate(() => {
       const body = document.body.innerText || '';
-      const isError = /expired|invalid|not found|404|error|unauthorized/i.test(body) && body.length < 500;
+      const trimmed = body.trim();
+      const isError = trimmed.length < 400 && /^\s*(expired|invalid|not found|404|500|error|oops|unauthorized|forbidden)/i.test(trimmed);
       const hasSchedule = /schedule|today|job|week|day/i.test(body);
       const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
       const hasViewToggle = buttons.some(b => /day|week/i.test(b.textContent));
@@ -783,7 +784,8 @@ async function handleCustomerTest(data) {
       const ss = await page.screenshot({ fullPage: true, type: 'jpeg', quality: 50 });
       const quoteInfo = await page.evaluate(() => {
         const body = document.body.innerText || '';
-        const isError = /expired|invalid|not found|404|error/i.test(body) && body.length < 500;
+        const trimmed = body.trim();
+        const isError = trimmed.length < 400 && /^\s*(expired|invalid|not found|404|500|error|oops|unauthorized)/i.test(trimmed);
         const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
         const tierButtons = buttons.filter(b => /standard|deep|extra|move|good|better|best|select|choose/i.test(b.textContent));
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
