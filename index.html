@@ -1149,15 +1149,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       addBubble('tSms',opener,true,ts());msgCount++;
 
       let lastSid=null,noReply=0;
-      // Poll every 15s. Wait up to 4 minutes for first reply, then 2 min between replies after.
-      for(let round=0;round<24;round++){
+      // Poll every 15s. Wait up to 4 minutes between replies.
+      for(let round=0;round<40;round++){
         await sleep(15000);
         // Poll Twilio for inbound messages FROM the business number TO our Twilio number
         const mData = await twilioGetMessages(smsNumber, testStartTime, 15);
         const inbound = (mData.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(testStartTime));
-        // First reply gets a longer wait (16 polls = 4 min); subsequent replies use 8 polls (2 min)
-        const maxNoReply = botResponded ? 8 : 16;
-        if(!inbound.length||(lastSid&&inbound[0].sid===lastSid)){noReply++;if(noReply>=maxNoReply){addSys('tSms',`No reply after ${maxNoReply * 15 / 60} minutes.`,'sys-err');break;}continue;}
+        if(!inbound.length||(lastSid&&inbound[0].sid===lastSid)){noReply++;if(noReply>=16){addSys('tSms','No reply after 4 minutes.','sys-err');break;}continue;}
         noReply=0;botResponded=true;const msg=inbound[0];lastSid=msg.sid;
         const body=msg.body||'';
         addBubble('tSms',body,false,new Date(msg.dateSent).toLocaleTimeString('en-US',{hour12:false}));msgCount++;
