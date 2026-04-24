@@ -2044,22 +2044,22 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
         await resetTestData();
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 1/12: Voice call...`);
+        setStatus(`[${biz.name}] Test 1/4 (sequential): Voice call...`);
         const voice = await testVoice(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 2/12: SMS...`);
+        setStatus(`[${biz.name}] Test 2/4 (sequential): SMS...`);
         const sms = await testSms(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 3/12: Website form...`);
+        setStatus(`[${biz.name}] Test 3/4 (sequential): Website form...`);
         const web = await testWebForm(biz);
 
         if (stopRequested) break;
         await resetTestData();
-        setStatus(`[${biz.name}] Test 4/12: Email...`);
+        setStatus(`[${biz.name}] Test 4/4 (sequential): Email...`);
         const email = await testEmail(biz);
 
         // Collect any invoice URL found during tests for browser testing
@@ -2077,43 +2077,36 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 5/12: Invoice browser test...`);
+
+        // ── PARALLEL PHASE: tests 5-12 are all independent browser/API tests ──
+        // They don't share the Twilio test number or DB state, so they can run concurrently.
+        // Each test catches its own errors internally and returns a status string.
+        setStatus(`[${biz.name}] Tests 5-12: running 8 browser/API tests in parallel...`);
         document.getElementById('invScreenshots').innerHTML = '';
-        const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 6/12: Portal test...`);
         document.getElementById('portalScreenshots').innerHTML = '';
-        const portal = await testPortal(biz);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 7/12: Dashboard pages...`);
         document.getElementById('dashScreenshots').innerHTML = '';
-        const dashboard = await testDashboardPages(biz);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 8/12: Public pages...`);
         document.getElementById('pubScreenshots').innerHTML = '';
-        const publicPages = await testPublicPages(biz);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 9/12: Crew portal...`);
         document.getElementById('crewScreenshots').innerHTML = '';
-        const crewPortal = await testCrewPortal(biz);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 10/12: Customer pages...`);
         document.getElementById('custScreenshots').innerHTML = '';
-        const customerPages = await testCustomerPages(biz, foundInvoiceUrl);
-
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 11/12: Interactive UI...`);
         const intSs = document.getElementById('intScreenshots'); if (intSs) intSs.innerHTML = '';
-        const interactive = await testInteractive(biz);
 
-        if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 12/12: API health...`);
-        const apiHealth = await testApiHealth(biz);
+        const parallelResults = await Promise.allSettled([
+          testInvoiceBrowser(biz, foundInvoiceUrl),
+          testPortal(biz),
+          testDashboardPages(biz),
+          testPublicPages(biz),
+          testCrewPortal(biz),
+          testCustomerPages(biz, foundInvoiceUrl),
+          testInteractive(biz),
+          testApiHealth(biz),
+        ]);
+        const statusOf = (settled) => settled.status === 'fulfilled' ? settled.value : (settled.reason?.message === '__STOPPED__' ? 'STOPPED' : 'ERROR');
+        const [invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth] = parallelResults.map(statusOf);
+
+        // Propagate stop signal if any parallel test raised __STOPPED__
+        if (parallelResults.some(p => p.status === 'rejected' && p.reason?.message === '__STOPPED__')) {
+          throw new Error('__STOPPED__');
+        }
 
         const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth };
         allResults.push(bizResults);
