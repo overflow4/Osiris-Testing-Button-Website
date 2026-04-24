@@ -1440,7 +1440,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     }
     // Fall back to Vercel API only if local server is truly unreachable
     console.log('Local server unreachable after 3 attempts, trying Vercel cloud...');
-    const apiMap = { '/invoice': '/api/browser-test-invoice', '/portal': '/api/browser-test-portal', '/pages': '/api/browser-test-pages', '/public': '/api/browser-test-public', '/crew': '/api/browser-test-crew', '/customer': '/api/browser-test-customer' };
+    const apiMap = { '/invoice': '/api/browser-test?type=invoice', '/portal': '/api/browser-test?type=portal', '/pages': '/api/browser-test?type=pages', '/public': '/api/browser-test?type=public', '/crew': '/api/browser-test?type=crew', '/customer': '/api/browser-test?type=customer' };
     const r = await fetch(apiMap[endpoint] || endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
