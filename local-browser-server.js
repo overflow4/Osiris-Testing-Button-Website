@@ -1,6 +1,33 @@
 const http = require('http');
 const { chromium } = require('playwright');
 
+// Tell lib handlers to use local Playwright instead of Browserbase
+process.env.USE_LOCAL_PLAYWRIGHT = '1';
+
+// Delegate-to-lib: lib handlers work directly with req/res. For the new endpoints
+// (/interactive, /crewflow) we don't duplicate the 70+ sub-checks — we just shim
+// req/res and call the same lib handler that Vercel calls.
+const libHandlers = {
+  interactive: require('./lib/browser-test-interactive'),
+  crewflow: require('./lib/browser-test-crew-flow'),
+};
+
+async function delegateToLibHandler(handlerName, data) {
+  const handler = libHandlers[handlerName];
+  if (!handler) return { error: `No lib handler for ${handlerName}` };
+  return await new Promise((resolve) => {
+    const reqShim = { method: 'POST', body: data, query: {} };
+    const resShim = {
+      _status: 200, _body: null,
+      setHeader() {},
+      status(s) { this._status = s; return this; },
+      json(b) { this._body = b; resolve(b); return this; },
+      end() { if (!this._body) resolve({}); return this; },
+    };
+    Promise.resolve(handler(reqShim, resShim)).catch(e => resolve({ error: e.message }));
+  });
+}
+
 const PORT = 3847;
 
 const SUPABASE_URL = 'https://kcmbwstjmdrjkhxhkkjt.supabase.co';
@@ -838,6 +865,8 @@ const server = http.createServer(async (req, res) => {
       else if (req.url === '/public') result = await handlePublicTest(data);
       else if (req.url === '/crew') result = await handleCrewTest(data);
       else if (req.url === '/customer') result = await handleCustomerTest(data);
+      else if (req.url === '/interactive') result = await delegateToLibHandler('interactive', data);
+      else if (req.url === '/crewflow') result = await delegateToLibHandler('crewflow', data);
       else result = { error: 'Unknown endpoint. Use /invoice, /portal, /pages, /public, /crew, or /customer' };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -857,5 +886,8 @@ server.listen(PORT, () => {
   console.log(`    POST /pages     — Generic pages test (dashboard deep)`);
   console.log(`    POST /public    — Public marketing pages test`);
   console.log(`    POST /crew      — Crew portal test`);
-  console.log(`    POST /customer  — Customer quote/tip pages test\n`);
+  console.log(`    POST /customer     — Customer quote/tip pages test`);
+  console.log(`    POST /interactive  — Comprehensive UI click-through (71 sub-checks)`);
+  console.log(`    POST /crewflow     — Crew job execution flow test\n`);
+  console.log(`  All runs local via Playwright — no Browserbase needed.\n`);
 });
