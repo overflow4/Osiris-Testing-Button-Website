@@ -8,6 +8,7 @@ process.env.USE_LOCAL_PLAYWRIGHT = '1';
 // (/interactive, /crewflow) we don't duplicate the 70+ sub-checks — we just shim
 // req/res and call the same lib handler that Vercel calls.
 const libHandlers = {
+  invoice: require('./lib/browser-test-invoice'),
   interactive: require('./lib/browser-test-interactive'),
   crewflow: require('./lib/browser-test-crew-flow'),
 };
@@ -859,7 +860,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const data = JSON.parse(body);
       let result;
-      if (req.url === '/invoice') result = await handleInvoiceTest(data);
+      if (req.url === '/invoice') result = await delegateToLibHandler('invoice', data);
       else if (req.url === '/portal') result = await handlePortalTest(data);
       else if (req.url === '/pages') result = await handlePagesTest(data);
       else if (req.url === '/public') result = await handlePublicTest(data);
