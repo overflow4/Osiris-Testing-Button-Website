@@ -640,6 +640,11 @@
     });
   }
 
+  // Sleep that ignores the stop flag — used for cleanup so it can't be interrupted
+  function sleepUninterruptible(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   function stopAllTests() {
     stopRequested = true;
     setStatus('Stopping tests...');
@@ -2176,28 +2181,34 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         showDiagBox(biz.name, bizResults);
       }
     } catch (e) {
-      if (e.message === '__STOPPED__') {
-        setStatus('Tests stopped.');
-        finishRun();
-        return;
-      }
-      throw e;
+      if (e.message !== '__STOPPED__') throw e;
+      // fall through to cleanup below
     }
 
-    if (stopRequested) {
-      setStatus('Tests stopped.');
+    // ALWAYS run final cleanup — even if tests were stopped or errored.
+    // Uses uninterruptible sleep so the stop flag can't cancel it.
+    const wasStopped = stopRequested;
+    if (wasStopped) {
+      setStatus('Tests stopped — cleaning up database...');
+    } else {
+      setStatus('Waiting for webhooks to settle...');
+    }
+    // Temporarily clear the stop flag so resetTestData isn't aborted by sleep()
+    stopRequested = false;
+    try {
+      await sleepUninterruptible(wasStopped ? 5000 : 30000);
+      await resetTestData();
+      await sleepUninterruptible(5000);
+      await resetTestData();
+    } catch (e) {
+      console.error('Cleanup error:', e);
+    }
+
+    if (wasStopped) {
+      setStatus('Tests stopped. Database cleaned.');
       finishRun();
       return;
     }
-
-    // Final cleanup after all tests — wait 30s for any pending webhooks to land,
-    // then reset twice to catch anything that arrives during the first reset
-    setStatus('Waiting for webhooks to settle...');
-    await sleep(30000);
-    setStatus('Cleaning up test data...');
-    await resetTestData();
-    await sleep(5000);
-    await resetTestData();
 
     // Generate AI summary from test logs
     setStatus('Generating AI summary...');
