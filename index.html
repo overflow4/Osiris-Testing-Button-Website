@@ -978,14 +978,37 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
   // ── Data Reset ──
   async function resetTestData() {
-    // Clean both the test phone AND the VAPI FROM number (system may store either)
-    for (const phone of [TEST_PHONE_ENC, FROM_VAPI_NUMBER_ENC]) {
-      for (const t of ['messages','calls','system_events','followup_queue','scheduled_tasks']) await supaDelete(t, `phone_number=eq.${phone}`);
-      await supaPatch('leads', `phone_number=eq.${phone}`, { converted_to_job_id: null });
-      await supaDelete('leads', `phone_number=eq.${phone}`);
-      await supaDelete('jobs', `phone_number=eq.${phone}`);
-      await supaDelete('customers', `phone_number=eq.${phone}`);
+    const phone = TEST_PHONE_ENC; // +14246771145 encoded
+
+    // Get customer IDs for the test phone so we can delete dependent records
+    const custs = await supaFetch('customers', `phone_number=eq.${phone}&select=id`);
+    const custIds = (custs || []).map(c => c.id).filter(Boolean);
+    const inIds = custIds.length ? `(${custIds.join(',')})` : null;
+
+    // Tables keyed by phone_number
+    for (const t of ['messages','calls','system_events','followup_queue']) {
+      await supaDelete(t, `phone_number=eq.${phone}`);
     }
+
+    // scheduled_tasks: phone is inside payload JSON, also linked by customerId
+    if (inIds) {
+      await supaDelete('scheduled_tasks', `payload->>customerId=in.${inIds}`);
+    }
+
+    // Clean leads (with FK clear first)
+    await supaPatch('leads', `phone_number=eq.${phone}`, { converted_to_job_id: null });
+    await supaDelete('leads', `phone_number=eq.${phone}`);
+
+    // Clean jobs (by phone_number AND customer_id)
+    await supaDelete('jobs', `phone_number=eq.${phone}`);
+    if (inIds) await supaDelete('jobs', `customer_id=in.${inIds}`);
+
+    // Clean quotes (by customer_phone AND customer_id)
+    await supaDelete('quotes', `customer_phone=eq.${phone}`);
+    if (inIds) await supaDelete('quotes', `customer_id=in.${inIds}`);
+
+    // Finally delete customers
+    await supaDelete('customers', `phone_number=eq.${phone}`);
   }
 
   // ── Notification ──
