@@ -36,3 +36,22 @@ If env vars need updating, tell the user to update them in the Vercel dashboard 
 ## Test Phone Number
 
 All tests use **Twilio number `+14246771145`** for SMS and voice (via VAPI import). This number is NOT in any Quo CRM contact, so webhooks fire correctly.
+
+## Test Data Cleanup (resetTestData)
+
+After every test, the following Supabase tables are cleaned for the test phone:
+- **By phone_number:** `messages`, `calls`, `call_tasks`, `system_events`, `followup_queue`
+- **By customer_id:** `conversation_outcomes`, `conversation_state`, `customer_message_log`, `sms_outreach_queue`, `customer_memory`, `customer_scores`, `customer_state_transitions`, `customer_tags`, `customer_memberships`, `scheduled_tasks` (via payload->>customerId)
+- **By quote_id:** `quote_line_items`, `quote_service_plans`, `quote_cleaner_preconfirms`
+- **By job_id:** `cleaner_assignments`, `visits`, `visit_line_items`, `visit_checklists`, `job_checklist_items`, `service_plan_jobs`
+- **Direct:** `quotes`, `jobs`, `leads`, `customers`
+
+Reset runs in proper FK order (leaf records → quotes/jobs/visits → customers).
+A 30s wait + double-reset runs after the final test to catch late webhooks.
+
+**External services NOT cleaned (logs remain):**
+- Twilio: SMS message logs
+- OpenPhone: notification SMS history
+- VAPI: call recordings and transcripts
+- Gmail: sent emails in Sent folder, replies in inbox
+- Stripe: checkout sessions (auto-expire in 24 hrs)

@@ -980,35 +980,72 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   async function resetTestData() {
     const phone = TEST_PHONE_ENC; // +14246771145 encoded
 
-    // Get customer IDs for the test phone so we can delete dependent records
+    // 1. Look up customer IDs, quote IDs, job IDs so we can clean dependent records
     const custs = await supaFetch('customers', `phone_number=eq.${phone}&select=id`);
-    const custIds = (custs || []).map(c => c.id).filter(Boolean);
-    const inIds = custIds.length ? `(${custIds.join(',')})` : null;
+    const custIds = (custs || []).map(c => c.id).filter(v => v != null);
 
-    // Tables keyed by phone_number
-    for (const t of ['messages','calls','system_events','followup_queue']) {
+    const quotesByPhone = await supaFetch('quotes', `customer_phone=eq.${phone}&select=id`);
+    const quotesByCust = custIds.length ? await supaFetch('quotes', `customer_id=in.(${custIds.join(',')})&select=id`) : [];
+    const quoteIds = [...new Set([...(quotesByPhone||[]), ...(quotesByCust||[])].map(q => q.id).filter(Boolean))];
+
+    const jobsByPhone = await supaFetch('jobs', `phone_number=eq.${phone}&select=id`);
+    const jobsByCust = custIds.length ? await supaFetch('jobs', `customer_id=in.(${custIds.join(',')})&select=id`) : [];
+    const jobIds = [...new Set([...(jobsByPhone||[]), ...(jobsByCust||[])].map(j => j.id).filter(Boolean))];
+
+    const visitsByJob = jobIds.length ? await supaFetch('visits', `job_id=in.(${jobIds.map(id=>`"${id}"`).join(',')})&select=id`) : [];
+    const visitIds = (visitsByJob || []).map(v => v.id).filter(Boolean);
+
+    const inCustIds = custIds.length ? `(${custIds.join(',')})` : null;
+    const inQuoteIds = quoteIds.length ? `(${quoteIds.map(id=>`"${id}"`).join(',')})` : null;
+    const inJobIds = jobIds.length ? `(${jobIds.map(id=>`"${id}"`).join(',')})` : null;
+    const inVisitIds = visitIds.length ? `(${visitIds.map(id=>`"${id}"`).join(',')})` : null;
+
+    // 2. Delete leaf-level records first (those that reference quotes/jobs/visits)
+    if (inQuoteIds) {
+      await supaDelete('quote_line_items', `quote_id=in.${inQuoteIds}`);
+      await supaDelete('quote_service_plans', `quote_id=in.${inQuoteIds}`);
+      await supaDelete('quote_cleaner_preconfirms', `quote_id=in.${inQuoteIds}`);
+    }
+    if (inVisitIds) {
+      await supaDelete('visit_line_items', `visit_id=in.${inVisitIds}`);
+      await supaDelete('visit_checklists', `visit_id=in.${inVisitIds}`);
+    }
+    if (inJobIds) {
+      await supaDelete('visits', `job_id=in.${inJobIds}`);
+      await supaDelete('cleaner_assignments', `job_id=in.${inJobIds}`);
+      await supaDelete('job_checklist_items', `job_id=in.${inJobIds}`);
+      await supaDelete('service_plan_jobs', `job_id=in.${inJobIds}`);
+    }
+
+    // 3. Delete records linked by customer_id
+    if (inCustIds) {
+      for (const t of ['conversation_outcomes','conversation_state','customer_message_log',
+                       'sms_outreach_queue','customer_memory','customer_scores',
+                       'customer_state_transitions','customer_tags','customer_memberships']) {
+        await supaDelete(t, `customer_id=in.${inCustIds}`);
+      }
+      await supaDelete('scheduled_tasks', `payload->>customerId=in.${inCustIds}`);
+    }
+
+    // 4. Delete records keyed by phone_number
+    for (const t of ['messages','calls','call_tasks','system_events','followup_queue']) {
       await supaDelete(t, `phone_number=eq.${phone}`);
     }
 
-    // scheduled_tasks: phone is inside payload JSON, also linked by customerId
-    if (inIds) {
-      await supaDelete('scheduled_tasks', `payload->>customerId=in.${inIds}`);
-    }
-
-    // Clean leads (with FK clear first)
+    // 5. Clean leads (clear FK first, then delete)
     await supaPatch('leads', `phone_number=eq.${phone}`, { converted_to_job_id: null });
     await supaDelete('leads', `phone_number=eq.${phone}`);
 
-    // Clean jobs (by phone_number AND customer_id)
-    await supaDelete('jobs', `phone_number=eq.${phone}`);
-    if (inIds) await supaDelete('jobs', `customer_id=in.${inIds}`);
-
-    // Clean quotes (by customer_phone AND customer_id)
+    // 6. Delete quotes
+    if (inQuoteIds) await supaDelete('quotes', `id=in.${inQuoteIds}`);
     await supaDelete('quotes', `customer_phone=eq.${phone}`);
-    if (inIds) await supaDelete('quotes', `customer_id=in.${inIds}`);
 
-    // Finally delete customers
-    await supaDelete('customers', `phone_number=eq.${phone}`);
+    // 7. Delete jobs
+    if (inJobIds) await supaDelete('jobs', `id=in.${inJobIds}`);
+    await supaDelete('jobs', `phone_number=eq.${phone}`);
+
+    // 8. Finally delete customers
+    if (inCustIds) await supaDelete('customers', `id=in.${inCustIds}`);
   }
 
   // ── Notification ──
@@ -2153,8 +2190,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       return;
     }
 
-    // Final cleanup after all tests
+    // Final cleanup after all tests — wait 30s for any pending webhooks to land,
+    // then reset twice to catch anything that arrives during the first reset
+    setStatus('Waiting for webhooks to settle...');
+    await sleep(30000);
     setStatus('Cleaning up test data...');
+    await resetTestData();
+    await sleep(5000);
     await resetTestData();
 
     // Generate AI summary from test logs
