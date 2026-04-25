@@ -2110,25 +2110,55 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
         await resetTestData();
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Test 1/4 (sequential): Voice call...`);
-        const voice = await testVoice(biz);
 
-        if (stopRequested) break;
-        await resetTestData();
-        setStatus(`[${biz.name}] Test 2/4 (sequential): SMS...`);
-        const sms = await testSms(biz);
+        // Clear screenshots up front
+        document.getElementById('invScreenshots').innerHTML = '';
+        document.getElementById('portalScreenshots').innerHTML = '';
+        document.getElementById('dashScreenshots').innerHTML = '';
+        document.getElementById('pubScreenshots').innerHTML = '';
+        document.getElementById('crewScreenshots').innerHTML = '';
+        document.getElementById('custScreenshots').innerHTML = '';
+        const intSs = document.getElementById('intScreenshots'); if (intSs) intSs.innerHTML = '';
 
-        if (stopRequested) break;
-        await resetTestData();
-        setStatus(`[${biz.name}] Test 3/4 (sequential): Website form...`);
-        const web = await testWebForm(biz);
+        // ── PHASE A: tests 1-4 run sequentially (share test phone) ──
+        //            tests 6-12 run in parallel (independent of test phone)
+        //            Both groups run concurrently to save total wall time.
+        setStatus(`[${biz.name}] Phase A: 4 sequential tests + 7 parallel browser/API tests...`);
 
-        if (stopRequested) break;
-        await resetTestData();
-        setStatus(`[${biz.name}] Test 4/4 (sequential): Email...`);
-        const email = await testEmail(biz);
+        const sequentialPromise = (async () => {
+          const v = await testVoice(biz);
+          if (stopRequested) return { voice: v };
+          await resetTestData();
+          const s = await testSms(biz);
+          if (stopRequested) return { voice: v, sms: s };
+          await resetTestData();
+          const w = await testWebForm(biz);
+          if (stopRequested) return { voice: v, sms: s, web: w };
+          await resetTestData();
+          const e = await testEmail(biz);
+          return { voice: v, sms: s, web: w, email: e };
+        })();
 
-        // Collect any invoice URL found during tests for browser testing
+        const parallelPromise = Promise.allSettled([
+          testPortal(biz),
+          testDashboardPages(biz),
+          testPublicPages(biz),
+          testCrewPortal(biz),
+          testCustomerPages(biz, null),
+          testInteractive(biz),
+          testApiHealth(biz),
+        ]);
+
+        const [seqResults, parallelResults] = await Promise.all([sequentialPromise, parallelPromise]);
+        const { voice = 'ERROR', sms = 'ERROR', web = 'ERROR', email = 'ERROR' } = seqResults;
+        const statusOf = (settled) => settled.status === 'fulfilled' ? settled.value : (settled.reason?.message === '__STOPPED__' ? 'STOPPED' : 'ERROR');
+        const [portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth] = parallelResults.map(statusOf);
+
+        if (stopRequested || parallelResults.some(p => p.status === 'rejected' && p.reason?.message === '__STOPPED__')) {
+          throw new Error('__STOPPED__');
+        }
+
+        // ── PHASE B: extract invoice URL from sequential tests, then run invoice browser test ──
         let foundInvoiceUrl = null;
         const allTranscripts = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
         for (const tid of allTranscripts) {
@@ -2143,36 +2173,8 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         if (stopRequested) break;
-
-        // ── PARALLEL PHASE: tests 5-12 are all independent browser/API tests ──
-        // They don't share the Twilio test number or DB state, so they can run concurrently.
-        // Each test catches its own errors internally and returns a status string.
-        setStatus(`[${biz.name}] Tests 5-12: running 8 browser/API tests in parallel...`);
-        document.getElementById('invScreenshots').innerHTML = '';
-        document.getElementById('portalScreenshots').innerHTML = '';
-        document.getElementById('dashScreenshots').innerHTML = '';
-        document.getElementById('pubScreenshots').innerHTML = '';
-        document.getElementById('crewScreenshots').innerHTML = '';
-        document.getElementById('custScreenshots').innerHTML = '';
-        const intSs = document.getElementById('intScreenshots'); if (intSs) intSs.innerHTML = '';
-
-        const parallelResults = await Promise.allSettled([
-          testInvoiceBrowser(biz, foundInvoiceUrl),
-          testPortal(biz),
-          testDashboardPages(biz),
-          testPublicPages(biz),
-          testCrewPortal(biz),
-          testCustomerPages(biz, foundInvoiceUrl),
-          testInteractive(biz),
-          testApiHealth(biz),
-        ]);
-        const statusOf = (settled) => settled.status === 'fulfilled' ? settled.value : (settled.reason?.message === '__STOPPED__' ? 'STOPPED' : 'ERROR');
-        const [invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth] = parallelResults.map(statusOf);
-
-        // Propagate stop signal if any parallel test raised __STOPPED__
-        if (parallelResults.some(p => p.status === 'rejected' && p.reason?.message === '__STOPPED__')) {
-          throw new Error('__STOPPED__');
-        }
+        setStatus(`[${biz.name}] Phase B: invoice browser test...`);
+        const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
 
         const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth };
         allResults.push(bizResults);
