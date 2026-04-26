@@ -40,10 +40,15 @@ async function takeScreenshot(page, label) {
 }
 
 // Click every visible non-destructive button on the page and report results
+// If a click navigates to a different origin, navigate back to keep the test scoped.
 async function testAllButtons(page, label) {
   const results = [];
   const buttons = await page.$$('button');
   const buttonInfos = [];
+
+  const startUrl = page.url();
+  let startOrigin;
+  try { startOrigin = new URL(startUrl).origin; } catch { startOrigin = null; }
 
   for (const btn of buttons) {
     const text = (await btn.textContent().catch(() => '')).trim().slice(0, 40);
@@ -59,11 +64,20 @@ async function testAllButtons(page, label) {
       await btn.scrollIntoViewIfNeeded().catch(() => {});
       await btn.click({ timeout: 3000 });
       await page.waitForTimeout(1000);
+      // If the click navigated us to a different origin, return to start
+      let currentOrigin;
+      try { currentOrigin = new URL(page.url()).origin; } catch { currentOrigin = null; }
+      const navigatedAway = startOrigin && currentOrigin && currentOrigin !== startOrigin;
+      if (navigatedAway) {
+        console.log(`[${label}] Button "${text}": navigated to external origin ${currentOrigin}, returning`);
+        await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(1000);
+      }
       const hasError = await page.evaluate(() => {
         const body = document.body.innerText;
         return /unhandled|crash|fatal|cannot read|undefined is not/i.test(body);
       });
-      results.push({ button: text, clickable: true, error: hasError });
+      results.push({ button: text, clickable: true, error: hasError, externalNav: navigatedAway });
       if (hasError) console.log(`[${label}] Button "${text}": clicked but caused error`);
       else console.log(`[${label}] Button "${text}": OK`);
     } catch (e) {
@@ -380,8 +394,9 @@ async function handlePortalTest(body) {
       screenshot: loginSs.data,
     });
 
-    // Step 3: Discover all navigation links
-    const navLinks = await page.evaluate(() => {
+    // Step 3: Discover all navigation links — same-origin only
+    const portalOrigin = new URL(baseUrl).origin;
+    const navLinks = await page.evaluate((allowedOrigin) => {
       const allLinks = [...document.querySelectorAll('a[href], nav a, aside a, [role="navigation"] a')];
       const seen = new Set();
       return allLinks
@@ -389,11 +404,16 @@ async function handlePortalTest(body) {
         .filter(l => {
           if (!l.text || !l.href || l.href === '#' || seen.has(l.href)) return false;
           if (/logout|sign.?out|javascript:/i.test(l.href) || /logout|sign.?out/i.test(l.text)) return false;
+          // Only same-origin links — don't follow external "Powered by" or OAuth redirects
+          try {
+            const linkOrigin = new URL(l.href).origin;
+            if (linkOrigin !== allowedOrigin) return false;
+          } catch (e) { return false; }
           seen.add(l.href);
           return true;
         });
-    });
-    console.log(`[portal:${businessName}] Found ${navLinks.length} nav links`);
+    }, portalOrigin);
+    console.log(`[portal:${businessName}] Found ${navLinks.length} same-origin nav links (filtered to ${portalOrigin})`);
 
     // Step 4: Visit every discovered navigation link
     for (const link of navLinks.slice(0, 15)) {
