@@ -11,6 +11,7 @@ const libHandlers = {
   invoice: require('./lib/browser-test-invoice'),
   interactive: require('./lib/browser-test-interactive'),
   crewflow: require('./lib/browser-test-crew-flow'),
+  crew: require('./lib/browser-test-crew'),
 };
 
 async function delegateToLibHandler(handlerName, data) {
@@ -765,54 +766,6 @@ async function handlePublicTest(data) {
 }
 
 // ═══════════════════════════════════════════
-// CREW PORTAL TEST
-// ═══════════════════════════════════════════
-async function handleCrewTest(data) {
-  const { crewPortalUrl, businessName } = data;
-  if (!crewPortalUrl) return { error: 'Missing crewPortalUrl' };
-
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    const results = [];
-
-    await page.goto(crewPortalUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(5000);
-
-    const mainSs = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
-    const portalInfo = await page.evaluate(() => {
-      const body = document.body.innerText || '';
-      const trimmed = body.trim();
-      const isError = trimmed.length < 400 && /^\s*(expired|invalid|not found|404|500|error|oops|unauthorized|forbidden)/i.test(trimmed);
-      const hasSchedule = /schedule|today|job|week|day/i.test(body);
-      const buttons = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
-      const hasViewToggle = buttons.some(b => /day|week/i.test(b.textContent));
-      const hasAvailability = buttons.some(b => /availability|time off/i.test(b.textContent));
-      const hasLogout = buttons.some(b => /logout|sign out/i.test(b.textContent));
-      const hasNavigation = buttons.some(b => /prev|next|today|go today/i.test(b.textContent));
-      const jobCards = document.querySelectorAll('[class*="job"], [class*="card"], [class*="appointment"]');
-      return { isError, hasSchedule, hasViewToggle, hasAvailability, hasLogout, hasNavigation, buttonCount: buttons.length, jobCardCount: jobCards.length };
-    }).catch(() => ({ isError: true }));
-
-    results.push({ section: 'crew_main', label: 'Crew Portal Main', passed: !portalInfo.isError && (portalInfo.hasSchedule || portalInfo.buttonCount > 2), detail: portalInfo.isError ? 'Portal error/expired' : `${portalInfo.buttonCount} buttons, ${portalInfo.jobCardCount} job cards`, screenshot: mainSs.toString('base64') });
-    if (!portalInfo.isError) {
-      results.push({ section: 'view_toggle', label: 'Day/Week View Toggle', passed: portalInfo.hasViewToggle, detail: portalInfo.hasViewToggle ? 'Found' : 'Not found', screenshot: null });
-      results.push({ section: 'navigation', label: 'Date Navigation', passed: portalInfo.hasNavigation, detail: portalInfo.hasNavigation ? 'Found' : 'Not found', screenshot: null });
-      results.push({ section: 'availability', label: 'Availability Button', passed: portalInfo.hasAvailability, detail: portalInfo.hasAvailability ? 'Found' : 'Not found', screenshot: null });
-      results.push({ section: 'logout', label: 'Logout Button', passed: portalInfo.hasLogout, detail: portalInfo.hasLogout ? 'Found' : 'Not found', screenshot: null });
-    }
-
-    await browser.close();
-    const passedCount = results.filter(r => r.passed).length;
-    return { passed: passedCount >= Math.ceil(results.length * 0.5), score: `${passedCount}/${results.length}`, results, businessName };
-  } catch (e) {
-    if (browser) await browser.close().catch(() => {});
-    return { error: e.message };
-  }
-}
-
-// ═══════════════════════════════════════════
 // CUSTOMER PAGES TEST
 // ═══════════════════════════════════════════
 async function handleCustomerTest(data) {
@@ -884,7 +837,7 @@ const server = http.createServer(async (req, res) => {
       else if (req.url === '/portal') result = await handlePortalTest(data);
       else if (req.url === '/pages') result = await handlePagesTest(data);
       else if (req.url === '/public') result = await handlePublicTest(data);
-      else if (req.url === '/crew') result = await handleCrewTest(data);
+      else if (req.url === '/crew') result = await delegateToLibHandler('crew', data);
       else if (req.url === '/customer') result = await handleCustomerTest(data);
       else if (req.url === '/interactive') result = await delegateToLibHandler('interactive', data);
       else if (req.url === '/crewflow') result = await delegateToLibHandler('crewflow', data);

@@ -486,7 +486,7 @@
     <label><span class="lbl">Portal Login Username (blank = admin)</span><input type="text" id="inPortalEmail" placeholder="admin"></label>
     <label><span class="lbl">Portal Login Password (blank = password)</span><input type="password" id="inPortalPass" placeholder="password"></label>
     <label><span class="lbl">Public Website URL (for marketing pages)</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
-    <label><span class="lbl">Crew Portal URL (token auth)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live/crew/TOKEN"></label>
+    <label><span class="lbl">Crew Portal Base URL (blank = cleanmachine.live, logs in as Technician)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live"></label>
     <label><span class="lbl">API Base URL</span><input type="text" id="inApiUrl" placeholder="https://cleanmachine.live"></label>
     <label><span class="lbl">Tip Page URL (token-authenticated, optional)</span><input type="text" id="inTipUrl" placeholder="https://cleanmachine.live/tip/TOKEN"></label>
     <div class="modal-btns">
@@ -1856,14 +1856,17 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
   // ── Crew Portal Test ──
   async function testCrewPortal(biz) {
-    if (!biz.crewUrl) { setBadge('badgeCrew', 'fail', 'SKIPPED'); addSys('tCrew', 'No crew portal URL configured.', 'sys-warn'); return 'SKIPPED'; }
     setBadge('badgeCrew', 'running', 'TESTING');
     addPhase('tCrew', 'Crew App Test');
-    addSys('tCrew', `Testing crew portal at ${biz.crewUrl}...`);
+    // Crew test now logs in via the Employee/Technician role button on the
+    // main portal; the legacy token URL is still accepted but optional.
+    const crewBase = biz.crewUrl || 'https://cleanmachine.live';
+    addSys('tCrew', `Testing crew portal at ${crewBase} (technician login)...`);
 
     try {
       const { data, source } = await browserFetch('/crew', {
-        crewPortalUrl: biz.crewUrl,
+        crewPortalUrl: crewBase,
+        credentials: biz.portalCredentials || null,
         businessName: biz.name,
       });
       addSys('tCrew', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
@@ -1886,7 +1889,8 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       let flowResults = [];
       try {
         const flowResp = await browserFetch('/crewflow', {
-          crewPortalUrl: biz.crewUrl,
+          crewPortalUrl: crewBase,
+          credentials: biz.portalCredentials || null,
           businessName: biz.name,
         });
         if (flowResp.data.error) {
