@@ -342,7 +342,7 @@
   <div class="browser-grid" id="browserGrid" style="display:none;">
     <div class="test-panel" id="panelInvoiceBrowser">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box" style="background:#3b82f620;">&#128269;</div><h3>Invoice Browser Test</h3></div>
+        <div class="left"><div class="icon-box" style="background:#3b82f620;">&#128269;</div><h3>Quote Page</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelInvoiceBrowser',this)">Copy</button><span class="badge badge-idle" id="badgeInvoiceBrowser">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -355,7 +355,7 @@
     </div>
     <div class="test-panel" id="panelPortal">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box" style="background:#8b5cf620;">&#127968;</div><h3>Portal Test</h3></div>
+        <div class="left"><div class="icon-box" style="background:#8b5cf620;">&#127968;</div><h3>Admin Login</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelPortal',this)">Copy</button><span class="badge badge-idle" id="badgePortal">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -375,7 +375,7 @@
     <!-- Dashboard Deep Test -->
     <div class="test-panel" id="panelDashboard">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-dash">&#128202;</div><h3>Dashboard Pages</h3></div>
+        <div class="left"><div class="icon-box icon-dash">&#128202;</div><h3>Admin Dashboard</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelDashboard',this)">Copy</button><span class="badge badge-idle" id="badgeDashboard">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -390,7 +390,7 @@
     <!-- Public Pages Test -->
     <div class="test-panel" id="panelPublic">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-pub">&#127760;</div><h3>Public Pages</h3></div>
+        <div class="left"><div class="icon-box icon-pub">&#127760;</div><h3>Marketing Site</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelPublic',this)">Copy</button><span class="badge badge-idle" id="badgePublic">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -405,7 +405,7 @@
     <!-- Crew Portal Test -->
     <div class="test-panel" id="panelCrew">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-crew">&#128119;</div><h3>Crew Portal</h3></div>
+        <div class="left"><div class="icon-box icon-crew">&#128119;</div><h3>Crew App</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelCrew',this)">Copy</button><span class="badge badge-idle" id="badgeCrew">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -422,7 +422,7 @@
     <!-- Customer Pages Test -->
     <div class="test-panel" id="panelCustomer">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-cust">&#128176;</div><h3>Customer Pages</h3></div>
+        <div class="left"><div class="icon-box icon-cust">&#128176;</div><h3>Customer Booking</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelCustomer',this)">Copy</button><span class="badge badge-idle" id="badgeCustomer">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -437,7 +437,7 @@
     <!-- Interactive Dashboard Test -->
     <div class="test-panel" id="panelInteractive">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box" style="background:#eab30820;">&#128293;</div><h3>Interactive UI</h3></div>
+        <div class="left"><div class="icon-box" style="background:#eab30820;">&#128293;</div><h3>Admin Workflows</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelInteractive',this)">Copy</button><span class="badge badge-idle" id="badgeInteractive">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -452,7 +452,7 @@
     <!-- API Health Test -->
     <div class="test-panel" id="panelApiHealth">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-api">&#9889;</div><h3>API Health</h3></div>
+        <div class="left"><div class="icon-box icon-api">&#9889;</div><h3>API Endpoints</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelApiHealth',this)">Copy</button><span class="badge badge-idle" id="badgeApiHealth">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -1740,10 +1740,6 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     { path: '/api/webhooks/openphone', label: 'OpenPhone Webhook', category: 'webhook', method: 'POST', body: { type: 'message.received', data: { id: 'test', from: '+15555555555', body: 'ping' } } },
     { path: '/api/webhooks/vapi', label: 'VAPI Webhook', category: 'webhook', method: 'POST', body: { message: { type: 'status-update', call: { id: 'test' } } } },
     { path: '/api/webhooks/telegram', label: 'Telegram Webhook', category: 'webhook', method: 'POST', body: { update_id: 1, message: { text: 'ping', from: { id: 1 } } } },
-    { path: '/api/webhooks/ghl', label: 'GoHighLevel Webhook', category: 'webhook', method: 'POST', body: { type: 'ContactCreate', contactId: 'test' } },
-    { path: '/api/webhooks/housecall-pro', label: 'HousecallPro Webhook', category: 'webhook', method: 'POST', body: { event: 'job.created', data: {} } },
-    { path: '/api/webhooks/meta', label: 'Meta Webhook', category: 'webhook', method: 'POST', body: { entry: [{ changes: [{ value: { leadgen_id: 'test' } }] }] } },
-    { path: '/api/webhooks/sam', label: 'SAM Conversion Webhook', category: 'webhook', method: 'POST', body: { event: 'conversion' } },
     // Key API routes
     { path: '/api/health', label: 'Health Check', category: 'api', method: 'GET' },
     { path: '/api/customers', label: 'Customers API', category: 'api', method: 'GET' },
