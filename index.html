@@ -1693,12 +1693,12 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     { key: 'leaderboard', path: '/leaderboard', label: 'Leaderboard', expectText: 'leaderboard|rank|top|performer|tip|upsell' },
     { key: 'earnings', path: '/earnings', label: 'Earnings', expectText: 'earning|tip|upsell|revenue|team' },
     { key: 'memberships', path: '/memberships', label: 'Memberships', expectText: 'membership|plan|status|pause|resume|cancel' },
-    // WinBros specific
-    { key: 'performance', path: '/performance', label: 'Performance', expectText: 'performance|revenue|job|review|sales' },
-    { key: 'payroll', path: '/payroll', label: 'Payroll', expectText: 'payroll|pay|rate|commission|week|draft|finalize' },
-    { key: 'service_plan_hub', path: '/service-plan-hub', label: 'Service Plan Hub', expectText: 'plan|arr|revenue|active|cancel' },
-    { key: 'service_plan_schedule', path: '/service-plan-schedule', label: 'Service Plan Schedule', expectText: 'schedule|plan|unscheduled|auto|drag|week' },
-    { key: 'control_center', path: '/control-center', label: 'Control Center', expectText: 'control|setting|config|sms|flow' },
+    // WinBros specific (only for window_cleaning tenants)
+    { key: 'performance', path: '/performance', label: 'Performance', expectText: 'performance|revenue|job|review|sales', onlyFor: 'window_cleaning' },
+    { key: 'payroll', path: '/payroll', label: 'Payroll', expectText: 'payroll|pay|rate|commission|week|draft|finalize', onlyFor: 'window_cleaning' },
+    { key: 'service_plan_hub', path: '/service-plan-hub', label: 'Service Plan Hub', expectText: 'plan|arr|revenue|active|cancel', onlyFor: 'window_cleaning' },
+    { key: 'service_plan_schedule', path: '/service-plan-schedule', label: 'Service Plan Schedule', expectText: 'schedule|plan|unscheduled|auto|drag|week', onlyFor: 'window_cleaning' },
+    { key: 'control_center', path: '/control-center', label: 'Control Center', expectText: 'control|setting|config|sms|flow', onlyFor: 'window_cleaning' },
   ];
 
   // API endpoints to health-check (crons + webhooks)
@@ -1755,15 +1755,23 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     const portalUrl = 'https://cleanmachine.live';
     const tenantSlug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+    // Filter by tenant type (skip pages marked onlyFor a different type)
+    const bizType = biz.type || 'window_cleaning';
+    const sections = DASHBOARD_SECTIONS.filter(s => !s.onlyFor || s.onlyFor === bizType);
+    if (sections.length < DASHBOARD_SECTIONS.length) {
+      const skipped = DASHBOARD_SECTIONS.length - sections.length;
+      addSys('tDashboard', `Skipping ${skipped} page(s) not applicable to ${bizType} tenants`, 'sys-warn');
+    }
+
     // Run pages in batches to stay within timeout
     const batchSize = 8;
     const allResults = [];
 
-    for (let i = 0; i < DASHBOARD_SECTIONS.length; i += batchSize) {
+    for (let i = 0; i < sections.length; i += batchSize) {
       if (stopRequested) break;
-      const batch = DASHBOARD_SECTIONS.slice(i, i + batchSize);
+      const batch = sections.slice(i, i + batchSize);
       const batchNum = Math.floor(i / batchSize) + 1;
-      const totalBatches = Math.ceil(DASHBOARD_SECTIONS.length / batchSize);
+      const totalBatches = Math.ceil(sections.length / batchSize);
       addSys('tDashboard', `Testing batch ${batchNum}/${totalBatches}: ${batch.map(s => s.label).join(', ')}...`);
 
       try {
