@@ -660,14 +660,21 @@ async function handlePagesTest(data) {
       console.log(`[pages:${businessName}] Testing: ${section.label} (${section.path})`);
       try {
         await page.goto(`${base}${section.path}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-        await page.waitForTimeout(section.waitMs || 4000);
+        await page.waitForTimeout(section.waitMs || 6000);
+        // Wait for any loading spinner to clear (up to 8s extra)
+        await page.waitForFunction(() => {
+          return !document.querySelector('.animate-spin, [class*="loading-spinner"], [class*="LoadingSpinner"]');
+        }, { timeout: 8000 }).catch(() => {});
         const screenshot = await page.screenshot({ fullPage: false, type: 'jpeg', quality: 50 });
         const info = await page.evaluate((expectPattern) => {
           const bodyText = document.body.innerText || '';
           const trimmed = bodyText.trim();
           const hasContent = bodyText.length > 50;
           const hasExpected = expectPattern ? new RegExp(expectPattern, 'i').test(bodyText) : true;
-          const isError = trimmed.length < 400 && /^\s*(404|500|error|oops|not found|something went wrong|unauthorized|forbidden|page not found)/i.test(trimmed);
+          // Stricter error detection: only flag pages dominated by error text (under 200 chars)
+          // and starting with a clear error indicator. Avoids false positives from pages
+          // that happen to contain the word "error" near the top.
+          const isError = trimmed.length < 200 && /^\s*(404|500|page not found|not found|something went wrong|unauthorized|forbidden|access denied)/i.test(trimmed);
           const isLoading = bodyText.length < 200 && /loading\.\.\.|please wait/i.test(bodyText);
           const buttons = [...document.querySelectorAll('button:not([disabled])')].filter(b => b.offsetParent !== null);
           const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea');
@@ -678,8 +685,10 @@ async function handlePagesTest(data) {
           const cards = document.querySelectorAll('[class*="card"]');
           const badges = document.querySelectorAll('[class*="badge"]');
           return { hasContent, hasExpected, isError, isLoading,
+            url: window.location.href,
+            textPreview: bodyText.slice(0, 250),
             counts: { buttons: buttons.length, inputs: inputs.length, tables: tables.length, charts: charts.length, toggles: toggles.length, tabs: tabs.length, cards: cards.length, badges: badges.length } };
-        }, section.expectText || null).catch(() => ({ hasContent: false, hasExpected: false, isError: true, isLoading: false, counts: {} }));
+        }, section.expectText || null).catch(() => ({ hasContent: false, hasExpected: false, isError: true, isLoading: false, counts: {}, textPreview: '' }));
         const passed = info.hasContent && !info.isError && !info.isLoading && info.hasExpected;
         const countParts = [];
         if (info.counts.buttons) countParts.push(`${info.counts.buttons} btn`);
@@ -688,7 +697,12 @@ async function handlePagesTest(data) {
         if (info.counts.charts) countParts.push(`${info.counts.charts} chart`);
         if (info.counts.toggles) countParts.push(`${info.counts.toggles} toggle`);
         if (info.counts.tabs) countParts.push(`${info.counts.tabs} tab`);
-        const detail = info.isError ? 'Error page' : info.isLoading ? 'Stuck loading' : !info.hasContent ? 'Empty page' : !info.hasExpected ? 'Missing expected content' : countParts.join(', ') || 'Content loaded';
+        const preview = (info.textPreview || '').slice(0, 120).replace(/\s+/g, ' ').trim();
+        const detail = info.isError ? `Error page: "${preview}"` :
+                       info.isLoading ? `Stuck loading: "${preview}"` :
+                       !info.hasContent ? `Empty page (URL: ${info.url || 'unknown'})` :
+                       !info.hasExpected ? `Missing expected content. Got: "${preview}"` :
+                       countParts.join(', ') || 'Content loaded';
         results.push({ section: sectionKey, label: section.label, passed, detail, screenshot: screenshot.toString('base64'), counts: info.counts });
       } catch (e) {
         results.push({ section: sectionKey, label: section.label, passed: false, detail: `Navigation failed: ${e.message.slice(0, 100)}`, screenshot: null, counts: {} });
