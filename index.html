@@ -1814,44 +1814,79 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   }
 
   // ── Public Pages Test ──
+  // Tests TWO sites in parallel:
+  //   1. theosirisai.com — the Osiris product marketing site (always tested)
+  //   2. The business's own marketing site (e.g. spotlessscrubbers.org for
+  //      Spotless Scrubbers). Uses biz.publicUrl if set, otherwise falls back
+  //      to a slug-based default.
+  function guessBusinessSite(name) {
+    const slug = (name || '').toLowerCase();
+    if (slug.includes('spotless')) return 'https://spotlessscrubbers.org';
+    if (slug.includes('winbros')) return 'https://winbroswindowcleaning.com';
+    return null;
+  }
+
   async function testPublicPages(biz) {
-    // Default to theosirisai.com if the business doesn't have a public URL set
-    const publicUrl = biz.publicUrl || 'https://theosirisai.com';
     setBadge('badgePublic', 'running', 'TESTING');
-    addPhase('tPublic', 'Marketing Site Test');
-    addSys('tPublic', `Testing public pages at ${publicUrl}${biz.publicUrl ? '' : ' (default)'}...`);
+    addPhase('tPublic', 'Marketing Sites Test');
 
-    try {
-      const { data, source } = await browserFetch('/public', {
-        websiteUrl: publicUrl,
-        businessName: biz.name,
-      });
+    const osirisUrl = 'https://theosirisai.com';
+    const bizUrl = biz.publicUrl || guessBusinessSite(biz.name);
+
+    addSys('tPublic', `Testing Osiris product site: ${osirisUrl}`);
+    if (bizUrl) {
+      addSys('tPublic', `Testing business marketing site: ${bizUrl}${biz.publicUrl ? '' : ' (slug default)'}`);
+    } else {
+      addSys('tPublic', `No business marketing site configured for "${biz.name}" — only testing Osiris site`, 'sys-warn');
+    }
+
+    // Run both site tests concurrently
+    const targets = [{ url: osirisUrl, label: 'Osiris' }];
+    if (bizUrl) targets.push({ url: bizUrl, label: biz.name });
+
+    const settled = await Promise.allSettled(
+      targets.map(t => browserFetch('/public', { websiteUrl: t.url, businessName: t.label }))
+    );
+
+    const allResults = [];
+    let totalPassed = 0;
+    let totalChecks = 0;
+    let anyError = false;
+
+    for (let i = 0; i < settled.length; i++) {
+      const t = targets[i];
+      const r = settled[i];
+      addSys('tPublic', `── ${t.label} (${t.url}) ──`);
+
+      if (r.status === 'rejected') {
+        anyError = true;
+        addSys('tPublic', `Error: ${r.reason?.message || r.reason}`, 'sys-err');
+        continue;
+      }
+      const { data, source } = r.value;
       addSys('tPublic', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
-
       if (data.error) {
+        anyError = true;
         addSys('tPublic', `Error: ${data.error}`, 'sys-err');
-        setBadge('badgePublic', 'fail', 'ERROR');
-        return 'FAIL';
+        continue;
       }
 
-      const results = data.results || [];
-      results.forEach(r => {
-        addSys('tPublic', `${r.passed ? '\u2713' : '\u2717'} ${r.label}: ${r.detail}`, r.passed ? 'sys-ok' : 'sys-err');
-        if (r.screenshot) addScreenshot('pubScreenshots', r.screenshot, r.label);
+      const results = (data.results || []).map(rr => ({ ...rr, label: `[${t.label}] ${rr.label}` }));
+      results.forEach(rr => {
+        addSys('tPublic', `${rr.passed ? '\u2713' : '\u2717'} ${rr.label}: ${rr.detail}`, rr.passed ? 'sys-ok' : 'sys-err');
+        if (rr.screenshot) addScreenshot('pubScreenshots', rr.screenshot, rr.label);
+        if (rr.passed) totalPassed++;
+        totalChecks++;
+        allResults.push(rr);
       });
-
-      showChecks('chkPublic', results.map(r => ({ t: r.label, s: r.passed })));
-      document.getElementById('mPubScore').textContent = data.score || '--';
-      document.getElementById('mPubPages').textContent = results.length;
-      setBadge('badgePublic', data.passed ? 'pass' : 'fail', data.score || '0/0');
-      return data.passed ? 'PASS' : 'FAIL';
-
-    } catch (e) {
-      if (e.message === '__STOPPED__') throw e;
-      addSys('tPublic', `Error: ${e.message}`, 'sys-err');
-      setBadge('badgePublic', 'fail', 'ERROR');
-      return 'FAIL';
     }
+
+    showChecks('chkPublic', allResults.map(r => ({ t: r.label, s: r.passed })));
+    document.getElementById('mPubScore').textContent = `${totalPassed}/${totalChecks}`;
+    document.getElementById('mPubPages').textContent = totalChecks;
+    const passOverall = !anyError && totalChecks > 0 && totalPassed / totalChecks >= 0.6;
+    setBadge('badgePublic', passOverall ? 'pass' : 'fail', `${totalPassed}/${totalChecks}`);
+    return passOverall ? 'PASS' : 'FAIL';
   }
 
   // ── Crew Portal Test ──
@@ -2153,7 +2188,6 @@ Focus only on the failures — do not comment on passing tests. Be specific with
           testDashboardPages(biz),
           testPublicPages(biz),
           testCrewPortal(biz),
-          testCustomerPages(biz, null),
           testInteractive(biz),
           testApiHealth(biz),
         ]);
@@ -2161,13 +2195,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         const [seqResults, parallelResults] = await Promise.all([sequentialPromise, parallelPromise]);
         const { voice = 'ERROR', sms = 'ERROR', web = 'ERROR', email = 'ERROR' } = seqResults;
         const statusOf = (settled) => settled.status === 'fulfilled' ? settled.value : (settled.reason?.message === '__STOPPED__' ? 'STOPPED' : 'ERROR');
-        const [portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth] = parallelResults.map(statusOf);
+        const [portal, dashboard, publicPages, crewPortal, interactive, apiHealth] = parallelResults.map(statusOf);
 
         if (stopRequested || parallelResults.some(p => p.status === 'rejected' && p.reason?.message === '__STOPPED__')) {
           throw new Error('__STOPPED__');
         }
 
-        // ── PHASE B: extract invoice URL from sequential tests, then run invoice browser test ──
+        // ── PHASE B: extract invoice URL from sequential tests, then run quote/customer tests in parallel ──
         let foundInvoiceUrl = null;
         const allTranscripts = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
         for (const tid of allTranscripts) {
@@ -2182,8 +2216,12 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Phase B: invoice browser test...`);
-        const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
+        setStatus(`[${biz.name}] Phase B: invoice + customer booking tests with discovered quote URL...`);
+        const phaseBResults = await Promise.allSettled([
+          testInvoiceBrowser(biz, foundInvoiceUrl),
+          testCustomerPages(biz, foundInvoiceUrl),
+        ]);
+        const [invoiceBrowser, customerPages] = phaseBResults.map(statusOf);
 
         const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth };
         allResults.push(bizResults);
