@@ -1807,14 +1807,15 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
   // ── Public Pages Test ──
   async function testPublicPages(biz) {
-    if (!biz.publicUrl) { setBadge('badgePublic', 'fail', 'SKIPPED'); addSys('tPublic', 'No public website URL configured.', 'sys-warn'); return 'SKIPPED'; }
+    // Default to theosirisai.com if the business doesn't have a public URL set
+    const publicUrl = biz.publicUrl || 'https://theosirisai.com';
     setBadge('badgePublic', 'running', 'TESTING');
     addPhase('tPublic', 'Marketing Site Test');
-    addSys('tPublic', `Testing public pages at ${biz.publicUrl}...`);
+    addSys('tPublic', `Testing public pages at ${publicUrl}${biz.publicUrl ? '' : ' (default)'}...`);
 
     try {
       const { data, source } = await browserFetch('/public', {
-        websiteUrl: biz.publicUrl,
+        websiteUrl: publicUrl,
         businessName: biz.name,
       });
       addSys('tPublic', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
