@@ -317,8 +317,28 @@ async function handlePortalTest(body) {
     const hasLoginForm = await page.evaluate(() => {
       return document.querySelectorAll('input[type="email"], input[type="password"], input[name="email"], input[name="password"], input[placeholder*="email" i], input[placeholder*="password" i]').length > 0;
     }).catch(() => false);
-    const needsLogin = hasLoginForm || isLoginPage;
-    console.log(`[portal:${businessName}] Login page: ${isLoginPage}, Login form: ${hasLoginForm}, URL: ${currentUrl}`);
+
+    // Probe a protected route — many portals have a public landing page at "/"
+    // but redirect protected routes (/jobs, /dashboard) to /login. Without this
+    // probe we'd falsely conclude "no login required".
+    let protectedRedirectsToLogin = false;
+    if (!isLoginPage && !hasLoginForm) {
+      for (const probe of ['/jobs', '/dashboard', '/admin']) {
+        try {
+          await page.goto(`${baseUrl}${probe}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await page.waitForTimeout(2500);
+          const probeUrl = page.url();
+          if (/login|signin|sign-in|auth/i.test(probeUrl)) {
+            protectedRedirectsToLogin = true;
+            console.log(`[portal:${businessName}] Protected route ${probe} redirected to ${probeUrl} — login required`);
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    const needsLogin = hasLoginForm || isLoginPage || protectedRedirectsToLogin;
+    console.log(`[portal:${businessName}] Login page: ${isLoginPage}, Login form: ${hasLoginForm}, Protected→login: ${protectedRedirectsToLogin}, URL: ${currentUrl}`);
 
     let loggedIn = !needsLogin;
     const hasCredentials = credentials && credentials.email && credentials.password;
@@ -392,7 +412,7 @@ async function handlePortalTest(body) {
     results.push({
       section: 'login', label: 'Portal Login',
       passed: loggedIn,
-      detail: hasLoginForm ? (loggedIn ? 'Logged in successfully' : (!hasCredentials ? 'Login form found but no credentials configured — add portal email/password in business settings' : 'Login failed — check credentials')) : 'No login required',
+      detail: needsLogin ? (loggedIn ? 'Logged in successfully' : (!hasCredentials ? 'Login form found but no credentials configured — add portal email/password in business settings' : 'Login failed — check credentials')) : 'No login required',
       screenshot: loginSs.data,
     });
 
@@ -465,11 +485,26 @@ async function handlePortalTest(body) {
     // Step 5: Test manual job input — actually fill the form and submit
     console.log(`[portal:${businessName}] Testing manual job input...`);
     try {
+      // If we're not logged in, skip — the form-fill logic would otherwise type
+      // test data into the login form and report a misleading success.
+      if (needsLogin && !loggedIn) {
+        results.push({
+          section: 'manual_job', label: 'Manual Job Input',
+          passed: false,
+          detail: 'Skipped — not logged in to portal (cannot reach job creation page)',
+          screenshot: null,
+        });
+        throw new Error('__skip_manual_job__');
+      }
+
       let jobPageFound = false;
       for (const jp of ['/jobs/new', '/jobs/create', '/new-job', '/add-job']) {
         try {
           await page.goto(`${baseUrl}${jp}`, { waitUntil: 'domcontentloaded', timeout: 10000 });
           await page.waitForTimeout(3000);
+          const landedUrl = page.url();
+          // If we got bounced to a login page, this isn't a job form
+          if (/login|signin|sign-in|auth/i.test(landedUrl)) continue;
           const hasForm = await page.evaluate(() => document.querySelectorAll('input:not([type="hidden"]), textarea').length > 2);
           if (hasForm) { jobPageFound = true; break; }
         } catch (e) {}
@@ -479,6 +514,17 @@ async function handlePortalTest(body) {
         // Try clicking "Add" or "New" from the jobs page
         await page.goto(`${baseUrl}/jobs`, { waitUntil: 'domcontentloaded', timeout: 10000 });
         await page.waitForTimeout(3000);
+        const jobsListUrl = page.url();
+        if (/login|signin|sign-in|auth/i.test(jobsListUrl)) {
+          // Bounced to login — skip
+          results.push({
+            section: 'manual_job', label: 'Manual Job Input',
+            passed: false,
+            detail: `Skipped — /jobs redirected to login (${jobsListUrl.slice(0, 80)})`,
+            screenshot: null,
+          });
+          throw new Error('__skip_manual_job__');
+        }
         const addBtn = await page.$('button:has-text("Add"), button:has-text("New"), button:has-text("Create"), a:has-text("Add"), a:has-text("New")');
         if (addBtn) { await addBtn.click(); await page.waitForTimeout(3000); jobPageFound = true; }
       }
@@ -565,12 +611,14 @@ async function handlePortalTest(body) {
             url: window.location.href,
           };
         });
+        const redirectedToLogin = /login|signin|sign-in|auth/i.test(afterSubmitInfo.url);
 
         results.push({
           section: 'manual_job',
           label: 'Manual Job Input',
-          passed: jobPageFound && submitted && (afterSubmitInfo.hasSuccess || !afterSubmitInfo.hasError),
+          passed: jobPageFound && submitted && !redirectedToLogin && (afterSubmitInfo.hasSuccess || !afterSubmitInfo.hasError),
           detail: !submitted ? 'Could not submit form'
+            : redirectedToLogin ? `Redirected to login page (${afterSubmitInfo.url.slice(0, 80)}) — not actually a job form`
             : afterSubmitInfo.hasSuccess ? 'Job created successfully'
             : afterSubmitInfo.hasError ? 'Form submitted but errors detected'
             : `Form submitted, redirected to ${afterSubmitInfo.url.slice(0, 60)}`,
@@ -588,11 +636,16 @@ async function handlePortalTest(body) {
         });
       }
     } catch (e) {
-      console.log(`[portal:${businessName}] Job input test failed: ${e.message}`);
-      results.push({
-        section: 'manual_job', label: 'Manual Job Input',
-        passed: false, detail: `Failed: ${e.message}`, screenshot: null,
-      });
+      // Sentinel from the early-skip branches: result already pushed, don't double-report
+      if (e.message === '__skip_manual_job__') {
+        console.log(`[portal:${businessName}] Manual job input skipped (login required)`);
+      } else {
+        console.log(`[portal:${businessName}] Job input test failed: ${e.message}`);
+        results.push({
+          section: 'manual_job', label: 'Manual Job Input',
+          passed: false, detail: `Failed: ${e.message}`, screenshot: null,
+        });
+      }
     }
 
     await browser.close();
