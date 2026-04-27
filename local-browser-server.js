@@ -12,6 +12,7 @@ const libHandlers = {
   interactive: require('./lib/browser-test-interactive'),
   crewflow: require('./lib/browser-test-crew-flow'),
   crew: require('./lib/browser-test-crew'),
+  public: require('./lib/browser-test-public'),
 };
 
 async function delegateToLibHandler(handlerName, data) {
@@ -836,7 +837,7 @@ const server = http.createServer(async (req, res) => {
       if (req.url === '/invoice') result = await delegateToLibHandler('invoice', data);
       else if (req.url === '/portal') result = await handlePortalTest(data);
       else if (req.url === '/pages') result = await handlePagesTest(data);
-      else if (req.url === '/public') result = await handlePublicTest(data);
+      else if (req.url === '/public') result = await delegateToLibHandler('public', data);
       else if (req.url === '/crew') result = await delegateToLibHandler('crew', data);
       else if (req.url === '/customer') result = await handleCustomerTest(data);
       else if (req.url === '/interactive') result = await delegateToLibHandler('interactive', data);
