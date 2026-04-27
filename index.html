@@ -766,7 +766,7 @@
 
   function generateDiagPrompt(bizName, results) {
     const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelCustomer', 'panelInteractive', 'panelApiHealth'];
-    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Invoice Browser', portal: 'Portal', dashboard: 'Dashboard Pages', publicPages: 'Public Pages', crewPortal: 'Crew Portal', customerPages: 'Customer Pages', interactive: 'Interactive UI', apiHealth: 'API Health' };
+    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Quote Page', portal: 'Admin Login', dashboard: 'Admin Dashboard', publicPages: 'Marketing Site', crewPortal: 'Crew App', customerPages: 'Customer Booking', interactive: 'Admin Workflows', apiHealth: 'API Endpoints' };
 
     // Collect failures
     const failures = [];
@@ -1542,7 +1542,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       return 'SKIPPED';
     }
     setBadge('badgeInvoiceBrowser', 'running', 'TESTING');
-    addPhase('tInvoiceBrowser', 'Invoice Browser Test');
+    addPhase('tInvoiceBrowser', 'Quote Page Test');
     addSys('tInvoiceBrowser', `Opening ${quoteUrl} in browser...`);
 
     try {
@@ -1750,7 +1750,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   // ── Dashboard Deep Test ──
   async function testDashboardPages(biz) {
     setBadge('badgeDashboard', 'running', 'TESTING');
-    addPhase('tDashboard', 'Dashboard Pages Test');
+    addPhase('tDashboard', 'Admin Dashboard Test');
 
     const portalUrl = 'https://cleanmachine.live';
     const tenantSlug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -1809,7 +1809,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   async function testPublicPages(biz) {
     if (!biz.publicUrl) { setBadge('badgePublic', 'fail', 'SKIPPED'); addSys('tPublic', 'No public website URL configured.', 'sys-warn'); return 'SKIPPED'; }
     setBadge('badgePublic', 'running', 'TESTING');
-    addPhase('tPublic', 'Public Pages Test');
+    addPhase('tPublic', 'Marketing Site Test');
     addSys('tPublic', `Testing public pages at ${biz.publicUrl}...`);
 
     try {
@@ -1849,7 +1849,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   async function testCrewPortal(biz) {
     if (!biz.crewUrl) { setBadge('badgeCrew', 'fail', 'SKIPPED'); addSys('tCrew', 'No crew portal URL configured.', 'sys-warn'); return 'SKIPPED'; }
     setBadge('badgeCrew', 'running', 'TESTING');
-    addPhase('tCrew', 'Crew Portal Test');
+    addPhase('tCrew', 'Crew App Test');
     addSys('tCrew', `Testing crew portal at ${biz.crewUrl}...`);
 
     try {
@@ -1913,7 +1913,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   // ── Customer Pages Test ──
   async function testCustomerPages(biz, quoteUrl) {
     setBadge('badgeCustomer', 'running', 'TESTING');
-    addPhase('tCustomer', 'Customer Pages Test');
+    addPhase('tCustomer', 'Customer Booking Test');
 
     const tipUrl = biz.tipUrl || null;
 
@@ -1964,7 +1964,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   // ── Interactive UI Test ──
   async function testInteractive(biz) {
     setBadge('badgeInteractive', 'running', 'TESTING');
-    addPhase('tInteractive', 'Interactive UI Test');
+    addPhase('tInteractive', 'Admin Workflows Test');
 
     const portalUrl = 'https://cleanmachine.live';
     addSys('tInteractive', `Testing interactive UI flows at ${portalUrl}...`);
@@ -2007,7 +2007,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   async function testApiHealth(biz) {
     const apiBase = biz.apiUrl || 'https://cleanmachine.live';
     setBadge('badgeApiHealth', 'running', 'TESTING');
-    addPhase('tApiHealth', 'API Health Check');
+    addPhase('tApiHealth', 'API Endpoints Check');
     addSys('tApiHealth', `Testing ${API_HEALTH_ENDPOINTS.length} endpoints at ${apiBase}...`);
 
     try {
