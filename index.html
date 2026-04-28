@@ -2176,7 +2176,9 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
         // ── PHASE B: extract invoice URL from sequential tests, then run quote page test ──
         let foundInvoiceUrl = null;
-        const allTranscripts = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
+        // Prefer the LATEST test's URL: cleanup runs between tests in Phase A, so
+        // earlier quotes are deleted by the time Phase B starts. Email runs last.
+        const allTranscripts = ['tEmail', 'tWeb', 'tSms', 'tVoice'];
         for (const tid of allTranscripts) {
           const el = document.getElementById(tid);
           if (el) {
