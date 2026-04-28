@@ -1273,8 +1273,12 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     setBadge('badgeWeb','running','TESTING');addPhase('tWeb','Website Form Submission');
     try {
       const bizType = biz.type || 'window_cleaning';
-      let websiteUrl = biz.web.trim().replace(/\/+$/, '');
+      let websiteUrl = biz.web.trim();
       if (!/^https?:\/\//i.test(websiteUrl)) websiteUrl = 'https://' + websiteUrl;
+      // The booking wizard lives on the homepage. Always navigate to the
+      // origin so configured paths like "/offer" (a stripped-down promo
+      // landing page) don't bypass it.
+      try { websiteUrl = new URL(websiteUrl).origin; } catch {}
       addSys('tWeb','Driving real website wizard via browser session...');
       addSys('tWeb','Target: '+websiteUrl);
       const { data: browserData, source } = await browserFetch('/websiteform', {
@@ -1307,17 +1311,24 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         service_type:'Exterior window cleaning', sqft:2500, frequency:'One-time',
         name:'Alex Thompson', phone:'4246771145', email:'alex.thompson.test@gmail.com',
       };
-      // Wait for processing, then check for follow-up SMS with invoice
+      // Wait for processing, then check for follow-up SMS with invoice.
+      // Anchor SMS filtering to the actual submit timestamp so prior tests'
+      // tail-end bot replies don't bleed in as false-positive PASSes.
       let postFormSms = false;
       let smsContent = '';
-      if (biz.sms) {
+      if (!browserData.webhookCall) {
+        addSys('tWeb','Skipping SMS check — form did not submit (no webhook POST captured)','sys-warn');
+      } else if (!biz.sms) {
+        addSys('tWeb','No SMS number configured — skipping SMS check.','sys-warn');
+      } else {
         addPhase('tWeb','Post-Form SMS Check');
         addSys('tWeb','Waiting for follow-up SMS with invoice link...');
         const smsNum = normalizePhone(biz.sms);
+        const submitAt = browserData.submitAt ? new Date(browserData.submitAt) : new Date(Date.now() - 5000);
         for (let poll = 0; poll < 6; poll++) {
           await sleep(10000);
           const md = await twilioGetMessages(smsNum, null, 10);
-          const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
+          const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) >= submitAt);
           if (recentMsgs.length > 0) {
             postFormSms = true;
             addPhase('tWeb','Follow-up SMS');
@@ -1330,8 +1341,6 @@ Focus only on the failures — do not comment on passing tests. Be specific with
           }
         }
         if (!postFormSms) addSys('tWeb','No follow-up SMS received after form submission.','sys-warn');
-      } else {
-        addSys('tWeb','No SMS number configured — skipping SMS check.','sys-warn');
       }
 
       // Build conversation context
