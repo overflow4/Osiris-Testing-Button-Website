@@ -26,22 +26,27 @@ module.exports = async function handler(req, res) {
 
     let quoteData = null;
 
-    // Try to fetch the quote data directly from the API (client-rendered pages)
+    // Try to fetch the quote data directly from the API. Try the canonical
+    // cleanmachine.live domain first (production), since bots sometimes send
+    // preview deployment URLs like osiris-*.vercel.app that don't share data.
     if (token) {
-      const apiUrl = `${urlObj.origin}/api/quotes/${token}`;
-      console.log(`[fetch-invoice][${requestId}] Trying API: ${apiUrl}`);
-      try {
-        const apiRes = await fetch(apiUrl, {
-          headers: { 'Accept': 'application/json' },
-        });
-        if (apiRes.ok) {
-          quoteData = await apiRes.json();
-          console.log(`[fetch-invoice][${requestId}] Got quote API data: ${JSON.stringify(quoteData).length} chars`);
-        } else {
-          console.log(`[fetch-invoice][${requestId}] API returned ${apiRes.status}, falling back to HTML`);
+      const candidateOrigins = ['https://cleanmachine.live'];
+      if (urlObj.origin !== 'https://cleanmachine.live') candidateOrigins.push(urlObj.origin);
+
+      for (const origin of candidateOrigins) {
+        const apiUrl = `${origin}/api/quotes/${token}`;
+        console.log(`[fetch-invoice][${requestId}] Trying API: ${apiUrl}`);
+        try {
+          const apiRes = await fetch(apiUrl, { headers: { 'Accept': 'application/json' } });
+          if (apiRes.ok) {
+            quoteData = await apiRes.json();
+            console.log(`[fetch-invoice][${requestId}] Got quote data from ${origin} (${JSON.stringify(quoteData).length} chars)`);
+            break;
+          }
+          console.log(`[fetch-invoice][${requestId}] ${origin} returned ${apiRes.status}`);
+        } catch (apiErr) {
+          console.log(`[fetch-invoice][${requestId}] ${origin} fetch failed: ${apiErr.message}`);
         }
-      } catch (apiErr) {
-        console.log(`[fetch-invoice][${requestId}] API fetch failed: ${apiErr.message}, falling back to HTML`);
       }
     }
 
