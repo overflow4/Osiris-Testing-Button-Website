@@ -19,6 +19,7 @@ const HANDLER_PATHS = {
   crewflow: './lib/browser-test-crew-flow',
   crew: './lib/browser-test-crew',
   public: './lib/browser-test-public',
+  websiteform: './lib/browser-test-website-form',
 };
 
 function loadFreshLibHandler(handlerName) {
@@ -925,7 +926,8 @@ const server = http.createServer(async (req, res) => {
       else if (req.url === '/customer') result = await handleCustomerTest(data);
       else if (req.url === '/interactive') result = await delegateToLibHandler('interactive', data);
       else if (req.url === '/crewflow') result = await delegateToLibHandler('crewflow', data);
-      else result = { error: 'Unknown endpoint. Use /invoice, /portal, /pages, /public, /crew, or /customer' };
+      else if (req.url === '/websiteform') result = await delegateToLibHandler('websiteform', data);
+      else result = { error: 'Unknown endpoint. Use /invoice, /portal, /pages, /public, /crew, /customer, /interactive, /crewflow, or /websiteform' };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

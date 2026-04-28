@@ -8,6 +8,7 @@ const handlers = {
   customer: require('../lib/browser-test-customer'),
   interactive: require('../lib/browser-test-interactive'),
   crewflow: require('../lib/browser-test-crew-flow'),
+  websiteform: require('../lib/browser-test-website-form'),
 };
 
 module.exports = async function handler(req, res) {

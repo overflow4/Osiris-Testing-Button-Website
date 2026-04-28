@@ -324,6 +324,7 @@
       </div>
       <div class="transcript" id="tWeb"><div class="transcript-empty">Waiting to run...</div></div>
       <div class="checks" id="chkWeb" style="display:none;"></div>
+      <div class="screenshot-gallery" id="shotsWeb"></div>
     </div>
     <div class="test-panel" id="panelEmail">
       <div class="tpanel-header">
@@ -1275,42 +1276,40 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     setBadge('badgeWeb','running','TESTING');addPhase('tWeb','Website Form Submission');
     try {
       const bizType = biz.type || 'window_cleaning';
-      // Build the correct form endpoint URL
-      let formUrl = biz.web.trim().replace(/\/+$/, '');
-      if (!/^https?:\/\//i.test(formUrl)) formUrl = 'https://' + formUrl;
-      // If URL already contains /api/, use as-is; otherwise extract domain and append API path
-      if (!/\/api\//.test(formUrl)) {
-        const urlObj = new URL(formUrl);
-        const slug = biz.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
-        formUrl = `${urlObj.origin}/api/webhooks/website/${slug}`;
-      }
-      addSys('tWeb','Submitting form to '+formUrl);
-      // Use correct field names matching the actual form (service_type, not service)
-      const formData = bizType === 'house_cleaning' ? {
-        name:'Alex Thompson',phone:'4246771145',email:'alex.thompson.test@gmail.com',
-        address:'742 Evergreen Terrace, Naperville, IL 60540',
-        service_type:'Standard cleaning',
-        message:'Looking for a standard cleaning for my 3 bed 2 bath home. One-time cleaning.',
-        source:'Google search'
-      } : {
-        name:'Alex Thompson',phone:'4246771145',email:'alex.thompson.test@gmail.com',
-        address:'742 Evergreen Terrace, Naperville, IL 60540',
-        service_type:'Exterior window cleaning',
-        message:'Interested in exterior window cleaning for my 2500 sqft home. No French panes. Preferred time: Saturday at 10am.',
-        source:'Google search'
-      };
-      Object.entries(formData).forEach(([k,v])=>addSys('tWeb',`  ${k}: ${v}`));
-      addSys('tWeb','Sending via server-side proxy to avoid CORS...');
-      const proxyRes=await fetch('/api/proxy-form',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({targetUrl:formUrl, formData})
+      let websiteUrl = biz.web.trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(websiteUrl)) websiteUrl = 'https://' + websiteUrl;
+      addSys('tWeb','Driving real website wizard via browser session...');
+      addSys('tWeb','Target: '+websiteUrl);
+      const { data: browserData, source } = await browserFetch('/websiteform', {
+        websiteUrl, bizType, businessName: biz.name,
       });
-      const proxyData=await proxyRes.json();
-      const status=proxyData.status;
-      document.getElementById('mWebStatus').textContent=status||'ERR';
-      addSys('tWeb',`Response: HTTP ${status} ${proxyData.statusText||''}`,status&&status<300?'sys-ok':'sys-err');
-      if(proxyData.body)addSys('tWeb','Body: '+proxyData.body.slice(0,200));
+      addSys('tWeb',`Browser session via ${source}`);
+      if (browserData.error && !(browserData.steps||[]).length) {
+        addSys('tWeb','Browser session failed: '+browserData.error,'sys-err');
+      }
+      (browserData.steps||[]).forEach(s => {
+        const txt = `${s.ok?'OK':'FAIL'} ${s.label}${s.detail?` — ${s.detail}`:''}`;
+        addSys('tWeb', txt, s.ok ? 'sys-ok' : 'sys-warn');
+      });
+      if (browserData.preSubmitShot) addScreenshot('shotsWeb', browserData.preSubmitShot, 'Wizard before submit');
+      if (browserData.postSubmitShot) addScreenshot('shotsWeb', browserData.postSubmitShot, 'After submit');
+      const status = browserData.webhookCall ? 200 : 0;
+      document.getElementById('mWebStatus').textContent = status || 'ERR';
+      if (browserData.webhookCall) {
+        addSys('tWeb','Webhook POST: '+browserData.webhookCall.url,'sys-ok');
+        if (browserData.webhookCall.body) addSys('tWeb','Payload: '+browserData.webhookCall.body.slice(0,300));
+      } else {
+        addSys('tWeb','No webhook POST detected within 12s of submit','sys-err');
+      }
+      // Reconstruct what we *intended* to submit so the AI inspector and
+      // conversation log keep their existing structured-context format.
+      const formData = bizType === 'house_cleaning' ? {
+        service_type:'Standard cleaning', bedrooms:3, bathrooms:2, frequency:'One-time',
+        name:'Alex Thompson', phone:'4246771145', email:'alex.thompson.test@gmail.com',
+      } : {
+        service_type:'Exterior window cleaning', sqft:2500, frequency:'One-time',
+        name:'Alex Thompson', phone:'4246771145', email:'alex.thompson.test@gmail.com',
+      };
       // Wait for processing, then check for follow-up SMS with invoice
       let postFormSms = false;
       let smsContent = '';
@@ -1339,7 +1338,8 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       }
 
       // Build conversation context
-      const conversationLog = `## Website Form Submission\n${Object.entries(formData).map(([k,v])=>`${k}: ${v}`).join('\n')}\n\nHTTP Response: ${status} ${proxyData.statusText||''}\n\n## Follow-up SMS\n${smsContent || 'None received'}`;
+      const webhookLine = browserData.webhookCall ? `Webhook POST: ${browserData.webhookCall.url}` : 'No webhook POST captured';
+      const conversationLog = `## Website Form Submission\n${Object.entries(formData).map(([k,v])=>`${k}: ${v}`).join('\n')}\n\n${webhookLine}\n\n## Follow-up SMS\n${smsContent || 'None received'}`;
 
       // Invoice inspection
       const invoice = await inspectInvoice(smsContent, conversationLog, 'website_form', biz.name, 'tWeb');
@@ -1505,7 +1505,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     }
     // Fall back to Vercel API only if local server is truly unreachable
     console.log('Local server unreachable after 3 attempts, trying Vercel cloud...');
-    const apiMap = { '/invoice': '/api/browser-test?type=invoice', '/portal': '/api/browser-test?type=portal', '/pages': '/api/browser-test?type=pages', '/public': '/api/browser-test?type=public', '/crew': '/api/browser-test?type=crew', '/customer': '/api/browser-test?type=customer', '/interactive': '/api/browser-test?type=interactive', '/crewflow': '/api/browser-test?type=crewflow' };
+    const apiMap = { '/invoice': '/api/browser-test?type=invoice', '/portal': '/api/browser-test?type=portal', '/pages': '/api/browser-test?type=pages', '/public': '/api/browser-test?type=public', '/crew': '/api/browser-test?type=crew', '/customer': '/api/browser-test?type=customer', '/interactive': '/api/browser-test?type=interactive', '/crewflow': '/api/browser-test?type=crewflow', '/websiteform': '/api/browser-test?type=websiteform' };
     const r = await fetch(apiMap[endpoint] || endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
