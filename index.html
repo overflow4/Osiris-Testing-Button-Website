@@ -353,19 +353,6 @@
       <div class="screenshot-gallery" id="invScreenshots"></div>
       <div class="checks" id="chkInvoiceBrowser" style="display:none;"></div>
     </div>
-    <div class="test-panel" id="panelPortal">
-      <div class="tpanel-header">
-        <div class="left"><div class="icon-box" style="background:#8b5cf620;">&#127968;</div><h3>Admin Login</h3></div>
-        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelPortal',this)">Copy</button><span class="badge badge-idle" id="badgePortal">IDLE</span></div>
-      </div>
-      <div class="tpanel-metrics">
-        <div class="tpanel-metric"><div class="val" id="mPortalScore">--</div><div class="lbl">Score</div></div>
-        <div class="tpanel-metric"><div class="val" id="mPortalSections">--</div><div class="lbl">Sections</div></div>
-      </div>
-      <div class="transcript" id="tPortal"><div class="transcript-empty">Waiting to run...</div></div>
-      <div class="screenshot-gallery" id="portalScreenshots"></div>
-      <div class="checks" id="chkPortal" style="display:none;"></div>
-    </div>
   </div>
 
   <!-- Extended Test Panels -->
@@ -420,24 +407,10 @@
 
   <div class="test-grid-3" id="extendedGrid2" style="display:none;">
     <!-- Customer Pages Test -->
-    <div class="test-panel" id="panelCustomer">
-      <div class="tpanel-header">
-        <div class="left"><div class="icon-box icon-cust">&#128176;</div><h3>Customer Booking</h3></div>
-        <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelCustomer',this)">Copy</button><span class="badge badge-idle" id="badgeCustomer">IDLE</span></div>
-      </div>
-      <div class="tpanel-metrics">
-        <div class="tpanel-metric"><div class="val" id="mCustScore">--</div><div class="lbl">Score</div></div>
-        <div class="tpanel-metric"><div class="val" id="mCustItems">--</div><div class="lbl">Checks</div></div>
-      </div>
-      <div class="transcript" id="tCustomer"><div class="transcript-empty">Waiting to run...</div></div>
-      <div class="screenshot-gallery" id="custScreenshots"></div>
-      <div class="checks" id="chkCustomer" style="display:none;"></div>
-    </div>
-
     <!-- Interactive Dashboard Test -->
     <div class="test-panel" id="panelInteractive">
       <div class="tpanel-header">
-        <div class="left"><div class="icon-box" style="background:#eab30820;">&#128293;</div><h3>Admin Workflows</h3></div>
+        <div class="left"><div class="icon-box" style="background:#eab30820;">&#128293;</div><h3>Admin Click-Through</h3></div>
         <div style="display:flex;align-items:center;gap:0.4rem;"><button class="copy-btn" onclick="copyPanel('panelInteractive',this)">Copy</button><span class="badge badge-idle" id="badgeInteractive">IDLE</span></div>
       </div>
       <div class="tpanel-metrics">
@@ -758,15 +731,15 @@
 
   function copyAllPanels(btn) {
     btn.dataset.label = btn.dataset.label || btn.textContent;
-    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelCustomer', 'panelInteractive', 'panelApiHealth'];
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelInteractive', 'panelApiHealth'];
     const text = `Jack's Tester — Full Test Report\nRun: ${new Date().toISOString()}\n\n` +
       panels.map(p => formatPanelText(p)).join('\n\n');
     navigator.clipboard.writeText(text).then(() => flashCopied(btn));
   }
 
   function generateDiagPrompt(bizName, results) {
-    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelPortal', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelCustomer', 'panelInteractive', 'panelApiHealth'];
-    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Quote Page', portal: 'Admin Login', dashboard: 'Admin Dashboard', publicPages: 'Marketing Site', crewPortal: 'Crew App', customerPages: 'Customer Booking', interactive: 'Admin Workflows', apiHealth: 'API Endpoints' };
+    const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelInteractive', 'panelApiHealth'];
+    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Quote Page', portal: 'Admin Login', dashboard: 'Admin Dashboard', publicPages: 'Marketing Site', crewPortal: 'Crew App', customerPages: 'Customer Booking', interactive: 'Admin Click-Through', apiHealth: 'API Endpoints' };
 
     // Collect failures
     const failures = [];
@@ -1663,15 +1636,15 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     // Core pages
     { key: 'command_center', path: '/', label: 'Command Center', expectText: 'dashboard|overview|stats|revenue|activity|job|lead' },
     { key: 'customers', path: '/customers', label: 'Customers', expectText: 'customer|contact|message|lead|phone' },
-    { key: 'calendar', path: '/calendar', label: 'Calendar (Jobs)', expectText: 'calendar|schedule|job|week|day|month' },
-    { key: 'pipeline', path: '/pipeline', label: 'Pipeline', expectText: 'pipeline|lead|quote|kanban|stage|retarget' },
+    { key: 'calendar', path: '/jobs', label: 'Calendar (Jobs)', expectText: 'calendar|schedule|job|week|day|month' },
+    { key: 'pipeline', path: '/retargeting/v3', label: 'Pipeline', expectText: 'pipeline|lead|quote|kanban|stage|retarget' },
     { key: 'inbox', path: '/inbox', label: 'Inbox', expectText: 'inbox|message|conversation|thread|priority' },
     { key: 'calls', path: '/calls', label: 'Calls', expectText: 'call|phone|inbound|outbound|log' },
     { key: 'assistant', path: '/assistant', label: 'Assistant', expectText: 'assistant|ai|chat|conversation|message' },
     // Teams
     { key: 'teams', path: '/teams', label: 'Teams', expectText: 'team|cleaner|member|roster|crew' },
     { key: 'teams_manage', path: '/teams/manage', label: 'Teams Manage', expectText: 'team|manage|create|assign|drag' },
-    { key: 'crew_assignment', path: '/crew-assignment', label: 'Crew Assignment', expectText: 'crew|assign|week|drag|cleaner' },
+    // /crew-assignment removed — does not exist on cleanmachine.live (404)
     { key: 'schedule', path: '/schedule', label: 'Schedule', expectText: 'schedule|day|week|job|time' },
     { key: 'my_schedule', path: '/my-schedule', label: 'My Schedule', expectText: 'schedule|day|week|time|availability' },
     // Insights
@@ -1682,11 +1655,11 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     { key: 'insights_pricing', path: '/insights/pricing', label: 'Insights: Pricing', expectText: 'pricing|price|tier|add-on|addon|variance' },
     { key: 'insights_funnel', path: '/insights/funnel', label: 'Insights: Funnel', expectText: 'funnel|conversion|stage|drop|bottleneck' },
     // Retargeting & Campaigns
-    { key: 'retargeting', path: '/retargeting', label: 'Retargeting', expectText: 'retarget|sequence|re-engage|customer|follow' },
+    { key: 'retargeting', path: '/retargeting/v3', label: 'Retargeting', expectText: 'retarget|sequence|re-engage|customer|follow' },
     { key: 'campaigns', path: '/campaigns', label: 'Campaigns', expectText: 'campaign|sequence|csv|import|lead|follow' },
     // Admin & Settings
     { key: 'admin', path: '/admin', label: 'Admin', expectText: 'admin|business|tenant|config|setup|credential' },
-    { key: 'settings', path: '/settings', label: 'Settings', expectText: 'setting|profile|account|config|timezone|business' },
+    // /settings removed — Settings is a sidebar modal, not a route (tested in Interactive UI)
     { key: 'exceptions', path: '/exceptions', label: 'Exceptions (Debug)', expectText: 'exception|event|error|log|system|debug' },
     { key: 'rain_day', path: '/rain-day', label: 'Rain Day', expectText: 'rain|reschedule|weather|date|job' },
     // Financial
@@ -2012,7 +1985,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   // ── Interactive UI Test ──
   async function testInteractive(biz) {
     setBadge('badgeInteractive', 'running', 'TESTING');
-    addPhase('tInteractive', 'Admin Workflows Test');
+    addPhase('tInteractive', 'Admin Click-Through Test');
 
     const portalUrl = 'https://cleanmachine.live';
     addSys('tInteractive', `Testing interactive UI flows at ${portalUrl}...`);
