@@ -7,16 +7,32 @@ process.env.USE_LOCAL_PLAYWRIGHT = '1';
 // Delegate-to-lib: lib handlers work directly with req/res. For the new endpoints
 // (/interactive, /crewflow) we don't duplicate the 70+ sub-checks — we just shim
 // req/res and call the same lib handler that Vercel calls.
-const libHandlers = {
-  invoice: require('./lib/browser-test-invoice'),
-  interactive: require('./lib/browser-test-interactive'),
-  crewflow: require('./lib/browser-test-crew-flow'),
-  crew: require('./lib/browser-test-crew'),
-  public: require('./lib/browser-test-public'),
+//
+// Hot-reload: every request re-requires the handler and helpers from disk
+// after purging Node's require cache. Without this, edits to lib files
+// (e.g. fixing a login flow) silently keep using the old code in memory
+// until the server is manually restarted, producing "fix doesn't work"
+// cycles where stale code is being run.
+const HANDLER_PATHS = {
+  invoice: './lib/browser-test-invoice',
+  interactive: './lib/browser-test-interactive',
+  crewflow: './lib/browser-test-crew-flow',
+  crew: './lib/browser-test-crew',
+  public: './lib/browser-test-public',
 };
 
+function loadFreshLibHandler(handlerName) {
+  const handlerRel = HANDLER_PATHS[handlerName];
+  if (!handlerRel) return null;
+  // Purge anything under ./lib so handler + helpers reload together.
+  for (const key of Object.keys(require.cache)) {
+    if (key.includes('/lib/browser-')) delete require.cache[key];
+  }
+  return require(handlerRel);
+}
+
 async function delegateToLibHandler(handlerName, data) {
-  const handler = libHandlers[handlerName];
+  const handler = loadFreshLibHandler(handlerName);
   if (!handler) return { error: `No lib handler for ${handlerName}` };
   return await new Promise((resolve) => {
     const reqShim = { method: 'POST', body: data, query: {} };
