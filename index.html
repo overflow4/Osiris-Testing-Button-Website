@@ -2175,20 +2175,23 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         // ── PHASE B: extract invoice URL from sequential tests, then run quote page test ──
+        // Find quote URL. Prefer canonical cleanmachine.live URLs over preview
+        // deployment URLs (osiris-*.vercel.app) which don't have production data.
+        // Iterate latest test first since cleanup deletes earlier tests' quotes.
         let foundInvoiceUrl = null;
-        // Prefer the LATEST test's URL: cleanup runs between tests in Phase A, so
-        // earlier quotes are deleted by the time Phase B starts. Email runs last.
         const allTranscripts = ['tEmail', 'tWeb', 'tSms', 'tVoice'];
+        const collectedUrls = [];
         for (const tid of allTranscripts) {
           const el = document.getElementById(tid);
-          if (el) {
-            const links = el.querySelectorAll('a.test-link');
-            for (const link of links) {
-              if (/cleanmachine|quote/i.test(link.href)) { foundInvoiceUrl = link.href; break; }
-            }
-          }
-          if (foundInvoiceUrl) break;
+          if (!el) continue;
+          el.querySelectorAll('a.test-link').forEach(link => {
+            if (/\/quote\/[a-f0-9]{20,}/i.test(link.href)) collectedUrls.push(link.href);
+          });
         }
+        // Prefer cleanmachine.live URLs first; fall back to any quote URL
+        foundInvoiceUrl = collectedUrls.find(u => /cleanmachine\.live/i.test(u))
+          || collectedUrls[0]
+          || null;
 
         if (stopRequested) break;
         setStatus(`[${biz.name}] Phase B: quote page test with discovered URL...`);
