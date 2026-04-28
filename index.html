@@ -1027,12 +1027,21 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   // ── Notification ──
   async function sendNotification(msg) {
     try {
-      await fetch(`${OPENPHONE_BASE}/messages`, {
+      const r = await fetch('/api/twilio-send', {
         method: 'POST',
-        headers: { 'Authorization': OPENPHONE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: FROM_OPENPHONE_ID, to: [NOTIFY_PHONE], content: msg })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: NOTIFY_PHONE, body: msg })
       });
-    } catch (e) {}
+      const data = await r.json();
+      if (!data.sent) {
+        console.error('Notification failed to send:', data.error);
+      } else {
+        console.log('Notification sent, SID:', data.sid);
+      }
+      return data;
+    } catch (e) {
+      console.error('sendNotification error:', e.message);
+    }
   }
 
   // ── Voice Test ──
