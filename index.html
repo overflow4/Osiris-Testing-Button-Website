@@ -739,7 +739,7 @@
 
   function generateDiagPrompt(bizName, results) {
     const panels = ['panelVoice', 'panelSms', 'panelWeb', 'panelEmail', 'panelInvoiceBrowser', 'panelDashboard', 'panelPublic', 'panelCrew', 'panelInteractive', 'panelApiHealth'];
-    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Quote Page', portal: 'Admin Login', dashboard: 'Admin Dashboard', publicPages: 'Marketing Site', crewPortal: 'Crew App', customerPages: 'Customer Booking', interactive: 'Admin Click-Through', apiHealth: 'API Endpoints' };
+    const testNames = { voice: 'Voice Call', sms: 'SMS', web: 'Website Form', email: 'Email', invoiceBrowser: 'Quote Page', dashboard: 'Admin Dashboard', publicPages: 'Marketing Site', crewPortal: 'Crew App', interactive: 'Admin Click-Through', apiHealth: 'API Endpoints' };
 
     // Collect failures
     const failures = [];
@@ -939,17 +939,15 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   }
 
   function resetPanels() {
-    ['tVoice','tSms','tWeb','tEmail','tInvoiceBrowser','tPortal','tDashboard','tPublic','tCrew','tCustomer','tApiHealth','tInteractive'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
-    ['chkVoice','chkSms','chkWeb','chkEmail','chkInvoiceBrowser','chkPortal','chkDashboard','chkPublic','chkCrew','chkCustomer','chkApiHealth','chkInteractive'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-    ['badgeVoice','badgeSms','badgeWeb','badgeEmail','badgeInvoiceBrowser','badgePortal','badgeDashboard','badgePublic','badgeCrew','badgeCustomer','badgeApiHealth','badgeInteractive'].forEach(id => { if (document.getElementById(id)) setBadge(id, 'idle', 'IDLE'); });
-    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb','mInvScore','mInvScreens','mPortalScore','mPortalSections','mDashScore','mDashPages','mPubScore','mPubPages','mCrewScore','mCrewItems','mCustScore','mCustItems','mApiScore','mApiEndpoints','mIntScore','mIntChecks'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '--'; });
+    ['tVoice','tSms','tWeb','tEmail','tInvoiceBrowser','tDashboard','tPublic','tCrew','tApiHealth','tInteractive'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = '<div class="transcript-empty">Waiting to run...</div>'; });
+    ['chkVoice','chkSms','chkWeb','chkEmail','chkInvoiceBrowser','chkDashboard','chkPublic','chkCrew','chkApiHealth','chkInteractive'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    ['badgeVoice','badgeSms','badgeWeb','badgeEmail','badgeInvoiceBrowser','badgeDashboard','badgePublic','badgeCrew','badgeApiHealth','badgeInteractive'].forEach(id => { if (document.getElementById(id)) setBadge(id, 'idle', 'IDLE'); });
+    ['mVoiceDur','mVoiceDb','mSmsMsgs','mSmsDb','mWebStatus','mWebDb','mEmailStatus','mEmailDb','mInvScore','mInvScreens','mDashScore','mDashPages','mPubScore','mPubPages','mCrewScore','mCrewItems','mApiScore','mApiEndpoints','mIntScore','mIntChecks'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '--'; });
     document.getElementById('audioRow').style.display = 'none';
     document.getElementById('invScreenshots').innerHTML = '';
-    document.getElementById('portalScreenshots').innerHTML = '';
     document.getElementById('dashScreenshots').innerHTML = '';
     document.getElementById('pubScreenshots').innerHTML = '';
     document.getElementById('crewScreenshots').innerHTML = '';
-    document.getElementById('custScreenshots').innerHTML = '';
     const intSs = document.getElementById('intScreenshots'); if (intSs) intSs.innerHTML = '';
     document.getElementById('diagBox').style.display = 'none';
   }
@@ -2130,17 +2128,15 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
         // Clear screenshots up front
         document.getElementById('invScreenshots').innerHTML = '';
-        document.getElementById('portalScreenshots').innerHTML = '';
         document.getElementById('dashScreenshots').innerHTML = '';
         document.getElementById('pubScreenshots').innerHTML = '';
         document.getElementById('crewScreenshots').innerHTML = '';
-        document.getElementById('custScreenshots').innerHTML = '';
         const intSs = document.getElementById('intScreenshots'); if (intSs) intSs.innerHTML = '';
 
-        // ── PHASE A: tests 1-4 run sequentially (share test phone) ──
-        //            tests 6-12 run in parallel (independent of test phone)
+        // ── PHASE A: 4 channel tests run sequentially (share test phone) ──
+        //            5 browser/API tests run in parallel (independent of test phone)
         //            Both groups run concurrently to save total wall time.
-        setStatus(`[${biz.name}] Phase A: 4 sequential tests + 7 parallel browser/API tests...`);
+        setStatus(`[${biz.name}] Phase A: 4 sequential channel tests + 5 parallel browser/API tests...`);
 
         const sequentialPromise = (async () => {
           const v = await testVoice(biz);
@@ -2157,7 +2153,6 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         })();
 
         const parallelPromise = Promise.allSettled([
-          testPortal(biz),
           testDashboardPages(biz),
           testPublicPages(biz),
           testCrewPortal(biz),
@@ -2168,13 +2163,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         const [seqResults, parallelResults] = await Promise.all([sequentialPromise, parallelPromise]);
         const { voice = 'ERROR', sms = 'ERROR', web = 'ERROR', email = 'ERROR' } = seqResults;
         const statusOf = (settled) => settled.status === 'fulfilled' ? settled.value : (settled.reason?.message === '__STOPPED__' ? 'STOPPED' : 'ERROR');
-        const [portal, dashboard, publicPages, crewPortal, interactive, apiHealth] = parallelResults.map(statusOf);
+        const [dashboard, publicPages, crewPortal, interactive, apiHealth] = parallelResults.map(statusOf);
 
         if (stopRequested || parallelResults.some(p => p.status === 'rejected' && p.reason?.message === '__STOPPED__')) {
           throw new Error('__STOPPED__');
         }
 
-        // ── PHASE B: extract invoice URL from sequential tests, then run quote/customer tests in parallel ──
+        // ── PHASE B: extract invoice URL from sequential tests, then run quote page test ──
         let foundInvoiceUrl = null;
         const allTranscripts = ['tVoice', 'tSms', 'tWeb', 'tEmail'];
         for (const tid of allTranscripts) {
@@ -2189,14 +2184,10 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         }
 
         if (stopRequested) break;
-        setStatus(`[${biz.name}] Phase B: invoice + customer booking tests with discovered quote URL...`);
-        const phaseBResults = await Promise.allSettled([
-          testInvoiceBrowser(biz, foundInvoiceUrl),
-          testCustomerPages(biz, foundInvoiceUrl),
-        ]);
-        const [invoiceBrowser, customerPages] = phaseBResults.map(statusOf);
+        setStatus(`[${biz.name}] Phase B: quote page test with discovered URL...`);
+        const invoiceBrowser = await testInvoiceBrowser(biz, foundInvoiceUrl);
 
-        const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, portal, dashboard, publicPages, crewPortal, customerPages, interactive, apiHealth };
+        const bizResults = { name: biz.name, voice, sms, web, email, invoiceBrowser, dashboard, publicPages, crewPortal, interactive, apiHealth };
         allResults.push(bizResults);
 
         // Show diagnostic prompt if any test failed
@@ -2234,7 +2225,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
 
     // Generate AI summary from test logs
     setStatus('Generating AI summary...');
-    const panelIds = ['tVoice', 'tSms', 'tWeb', 'tEmail', 'tInvoiceBrowser', 'tPortal'];
+    const panelIds = ['tVoice', 'tSms', 'tWeb', 'tEmail', 'tInvoiceBrowser', 'tDashboard', 'tPublic', 'tCrew', 'tInteractive', 'tApiHealth'];
     const panelLogs = panelIds.map(id => {
       const el = document.getElementById(id);
       return el ? `## ${id}\n${el.innerText}` : '';
