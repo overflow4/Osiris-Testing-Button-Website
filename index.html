@@ -75,8 +75,11 @@
       opacity:0; pointer-events:none; transition:opacity 0.2s;
     }
     .modal-overlay.open { opacity:1; pointer-events:auto; }
-    .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); width:480px; max-width:95vw; padding:1.5rem; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); width:720px; max-width:95vw; max-height:90vh; overflow-y:auto; padding:1.5rem; }
     .modal h2 { font-size:1rem; margin-bottom:1rem; }
+    .modal-fields { display:grid; grid-template-columns:1fr 1fr; gap:0 0.9rem; }
+    @media (max-width: 600px) { .modal-fields { grid-template-columns:1fr; } }
+    .modal-fields .full-row { grid-column:1 / -1; }
     .modal label { display:block; margin-bottom:0.8rem; }
     .modal .lbl { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:0.3rem; display:block; }
     .modal input {
@@ -448,19 +451,18 @@
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2 id="modalTitle">Add Business</h2>
-    <label><span class="lbl">Business Name *</span><input type="text" id="inBizName" placeholder="e.g. WinBros Window Cleaning"></label>
-    <label><span class="lbl">Business Type *</span><select id="inBizType"><option value="window_cleaning">Window Cleaning (WinBros-style)</option><option value="house_cleaning">Cleaning Company (Spotless-style)</option></select></label>
-    <label><span class="lbl">VAPI Phone Number (for voice calls)</span><input type="text" id="inVapi" placeholder="+15103705908"></label>
-    <label><span class="lbl">SMS Phone Number (for text messaging)</span><input type="text" id="inSms" placeholder="+17479663565"></label>
-    <label><span class="lbl">Website URL (for form submissions)</span><input type="text" id="inWeb" placeholder="https://example.com/contact"></label>
-    <label><span class="lbl">Email Address (for email testing)</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
-    <label><span class="lbl">Portal Login Username (blank = admin)</span><input type="text" id="inPortalEmail" placeholder="admin"></label>
-    <label><span class="lbl">Portal Login Password (blank = password)</span><input type="password" id="inPortalPass" placeholder="password"></label>
-    <label><span class="lbl">Public Website URL (for marketing pages)</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
-    <label><span class="lbl">Crew Portal Base URL (blank = cleanmachine.live, logs in as Technician)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live"></label>
-    <label><span class="lbl">Crew Test Phone (registered technician — leave blank to skip crew login)</span><input type="text" id="inCrewPhone" placeholder="+15551234567"></label>
-    <label><span class="lbl">API Base URL</span><input type="text" id="inApiUrl" placeholder="https://cleanmachine.live"></label>
-    <label><span class="lbl">Tip Page URL (token-authenticated, optional)</span><input type="text" id="inTipUrl" placeholder="https://cleanmachine.live/tip/TOKEN"></label>
+    <div class="modal-fields">
+      <label class="full-row"><span class="lbl">Business Name *</span><input type="text" id="inBizName" placeholder="e.g. WinBros Window Cleaning"></label>
+      <label class="full-row"><span class="lbl">Business Type *</span><select id="inBizType"><option value="window_cleaning">Window Cleaning (WinBros-style)</option><option value="house_cleaning">Cleaning Company (Spotless-style)</option></select></label>
+      <label><span class="lbl">VAPI Phone Number</span><input type="text" id="inVapi" placeholder="+15103705908"></label>
+      <label><span class="lbl">SMS Phone Number</span><input type="text" id="inSms" placeholder="+17479663565"></label>
+      <label><span class="lbl">Website URL (for form)</span><input type="text" id="inWeb" placeholder="https://example.com/contact"></label>
+      <label><span class="lbl">Email Address</span><input type="text" id="inEmail" placeholder="info@example.com"></label>
+      <label><span class="lbl">Portal Login Username</span><input type="text" id="inPortalEmail" placeholder="admin"></label>
+      <label><span class="lbl">Portal Login Password</span><input type="password" id="inPortalPass" placeholder="password"></label>
+      <label><span class="lbl">Public Marketing Website</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
+      <label><span class="lbl">Crew Test Phone (technician)</span><input type="text" id="inCrewPhone" placeholder="+15551234567"></label>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-accent" id="modalSaveBtn" onclick="saveBiz()">Add Business</button>
@@ -890,10 +892,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     document.getElementById('inPortalEmail').value = b.portalCredentials?.email || '';
     document.getElementById('inPortalPass').value = b.portalCredentials?.password || '';
     document.getElementById('inPublicUrl').value = b.publicUrl || '';
-    document.getElementById('inCrewUrl').value = b.crewUrl || '';
     document.getElementById('inCrewPhone').value = b.crewPhone || '';
-    document.getElementById('inApiUrl').value = b.apiUrl || '';
-    document.getElementById('inTipUrl').value = b.tipUrl || '';
     document.getElementById('modalTitle').textContent = 'Edit Business';
     document.getElementById('modalSaveBtn').textContent = 'Save Changes';
     document.getElementById('modalOverlay').classList.add('open');
@@ -903,7 +902,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   function closeModal() {
     editingBizIdx = -1;
     document.getElementById('modalOverlay').classList.remove('open');
-    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass','inPublicUrl','inCrewUrl','inCrewPhone','inApiUrl','inTipUrl'].forEach(id => document.getElementById(id).value = '');
+    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass','inPublicUrl','inCrewPhone'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inBizType').selectedIndex = 0;
   }
 
@@ -922,10 +921,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         password: document.getElementById('inPortalPass').value.trim(),
       },
       publicUrl: document.getElementById('inPublicUrl').value.trim(),
-      crewUrl: document.getElementById('inCrewUrl').value.trim(),
       crewPhone: document.getElementById('inCrewPhone').value.trim(),
-      apiUrl: document.getElementById('inApiUrl').value.trim(),
-      tipUrl: document.getElementById('inTipUrl').value.trim(),
     };
     if (editingBizIdx >= 0) {
       data.checked = businesses[editingBizIdx].checked;
