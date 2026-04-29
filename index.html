@@ -458,6 +458,7 @@
     <label><span class="lbl">Portal Login Password (blank = password)</span><input type="password" id="inPortalPass" placeholder="password"></label>
     <label><span class="lbl">Public Website URL (for marketing pages)</span><input type="text" id="inPublicUrl" placeholder="https://spotlessscrubbers.com"></label>
     <label><span class="lbl">Crew Portal Base URL (blank = cleanmachine.live, logs in as Technician)</span><input type="text" id="inCrewUrl" placeholder="https://cleanmachine.live"></label>
+    <label><span class="lbl">Crew Test Phone (registered technician — leave blank to skip crew login)</span><input type="text" id="inCrewPhone" placeholder="+15551234567"></label>
     <label><span class="lbl">API Base URL</span><input type="text" id="inApiUrl" placeholder="https://cleanmachine.live"></label>
     <label><span class="lbl">Tip Page URL (token-authenticated, optional)</span><input type="text" id="inTipUrl" placeholder="https://cleanmachine.live/tip/TOKEN"></label>
     <div class="modal-btns">
@@ -890,6 +891,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     document.getElementById('inPortalPass').value = b.portalCredentials?.password || '';
     document.getElementById('inPublicUrl').value = b.publicUrl || '';
     document.getElementById('inCrewUrl').value = b.crewUrl || '';
+    document.getElementById('inCrewPhone').value = b.crewPhone || '';
     document.getElementById('inApiUrl').value = b.apiUrl || '';
     document.getElementById('inTipUrl').value = b.tipUrl || '';
     document.getElementById('modalTitle').textContent = 'Edit Business';
@@ -901,7 +903,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   function closeModal() {
     editingBizIdx = -1;
     document.getElementById('modalOverlay').classList.remove('open');
-    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass','inPublicUrl','inCrewUrl','inApiUrl','inTipUrl'].forEach(id => document.getElementById(id).value = '');
+    ['inBizName','inVapi','inSms','inWeb','inEmail','inPortalEmail','inPortalPass','inPublicUrl','inCrewUrl','inCrewPhone','inApiUrl','inTipUrl'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inBizType').selectedIndex = 0;
   }
 
@@ -921,6 +923,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       },
       publicUrl: document.getElementById('inPublicUrl').value.trim(),
       crewUrl: document.getElementById('inCrewUrl').value.trim(),
+      crewPhone: document.getElementById('inCrewPhone').value.trim(),
       apiUrl: document.getElementById('inApiUrl').value.trim(),
       tipUrl: document.getElementById('inTipUrl').value.trim(),
     };
@@ -1885,9 +1888,16 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     addSys('tCrew', `Testing crew portal at ${crewBase} (technician login)...`);
 
     try {
+      // Build credentials for the technician login. Use the dedicated
+      // crewPhone field if set; otherwise fall back to portal creds (the
+      // helper will treat the phone-only screen as a real failure with
+      // "No crew account found" diagnostic, not silent cascade).
+      const crewCreds = biz.crewPhone
+        ? { email: biz.crewPhone, password: '' }
+        : (biz.portalCredentials || null);
       const { data, source } = await browserFetch('/crew', {
         crewPortalUrl: crewBase,
-        credentials: biz.portalCredentials || null,
+        credentials: crewCreds,
         businessName: biz.name,
       });
       addSys('tCrew', `Running via ${source === 'local' ? 'local Playwright' : 'Browserbase cloud'}`, source === 'local' ? 'sys-ok' : 'sys-warn');
@@ -1911,7 +1921,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       try {
         const flowResp = await browserFetch('/crewflow', {
           crewPortalUrl: crewBase,
-          credentials: biz.portalCredentials || null,
+          credentials: crewCreds,
           businessName: biz.name,
         });
         if (flowResp.data.error) {
