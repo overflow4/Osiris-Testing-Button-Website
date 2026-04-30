@@ -957,7 +957,8 @@ Focus only on the failures — do not comment on passing tests. Be specific with
   }
 
   // ── Data Reset ──
-  async function resetTestData() {
+  async function resetTestData(opts = {}) {
+    const { keepQuotes = false } = opts;
     const phone = TEST_PHONE_ENC; // +14246771145 encoded
 
     // 1. Look up customer IDs, quote IDs, job IDs so we can clean dependent records
@@ -981,7 +982,7 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     const inVisitIds = visitIds.length ? `(${visitIds.map(id=>`"${id}"`).join(',')})` : null;
 
     // 2. Delete leaf-level records first (those that reference quotes/jobs/visits)
-    if (inQuoteIds) {
+    if (inQuoteIds && !keepQuotes) {
       await supaDelete('quote_line_items', `quote_id=in.${inQuoteIds}`);
       await supaDelete('quote_service_plans', `quote_id=in.${inQuoteIds}`);
       await supaDelete('quote_cleaner_preconfirms', `quote_id=in.${inQuoteIds}`);
@@ -1016,16 +1017,18 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     await supaPatch('leads', `phone_number=eq.${phone}`, { converted_to_job_id: null });
     await supaDelete('leads', `phone_number=eq.${phone}`);
 
-    // 6. Delete quotes
-    if (inQuoteIds) await supaDelete('quotes', `id=in.${inQuoteIds}`);
-    await supaDelete('quotes', `customer_phone=eq.${phone}`);
+    // 6. Delete quotes (skipped during between-test cleanups so Phase B can use them)
+    if (!keepQuotes) {
+      if (inQuoteIds) await supaDelete('quotes', `id=in.${inQuoteIds}`);
+      await supaDelete('quotes', `customer_phone=eq.${phone}`);
+    }
 
     // 7. Delete jobs
     if (inJobIds) await supaDelete('jobs', `id=in.${inJobIds}`);
     await supaDelete('jobs', `phone_number=eq.${phone}`);
 
-    // 8. Finally delete customers
-    if (inCustIds) await supaDelete('customers', `id=in.${inCustIds}`);
+    // 8. Finally delete customers (only if no quotes still reference them)
+    if (inCustIds && !keepQuotes) await supaDelete('customers', `id=in.${inCustIds}`);
   }
 
   // ── Notification ──
@@ -2277,8 +2280,33 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     // Send AI summary first, then short results
     setStatus('Sending notifications...');
     if (aiSummary) await sendNotification(aiSummary);
-    const summary = allResults.map(r => `${r.name}: Voice=${r.voice}, SMS=${r.sms}, Web=${r.web}, Email=${r.email}, Invoice=${r.invoiceBrowser||'N/A'}, Portal=${r.portal||'N/A'}, Dash=${r.dashboard||'N/A'}, Public=${r.publicPages||'N/A'}, Crew=${r.crewPortal||'N/A'}, Customer=${r.customerPages||'N/A'}, Interactive=${r.interactive||'N/A'}, API=${r.apiHealth||'N/A'}`).join(' | ');
-    await sendNotification(`Jack's Tester done. ${summary}`);
+    // Per-business test summary, one check per line for SMS readability.
+    // Format:
+    //   Jack's Tester done.
+    //
+    //   <Business Name>:
+    //   Voice=PASS
+    //   SMS=PASS
+    //   ...
+    const formatBiz = (r) => {
+      const lines = [
+        `Voice=${r.voice}`,
+        `SMS=${r.sms}`,
+        `Web=${r.web}`,
+        `Email=${r.email}`,
+        `Invoice=${r.invoiceBrowser || 'N/A'}`,
+        `Portal=${r.portal || 'N/A'}`,
+        `Dash=${r.dashboard || 'N/A'}`,
+        `Public=${r.publicPages || 'N/A'}`,
+        `Crew=${r.crewPortal || 'N/A'}`,
+        `Customer=${r.customerPages || 'N/A'}`,
+        `Interactive=${r.interactive || 'N/A'}`,
+        `API=${r.apiHealth || 'N/A'}`,
+      ];
+      return `${r.name}:\n${lines.join('\n')}`;
+    };
+    const summary = allResults.map(formatBiz).join('\n\n');
+    await sendNotification(`Jack's Tester done.\n\n${summary}`);
     setStatus('All tests complete. Notification sent to +1 (415) 720-4580.');
 
     finishRun();
