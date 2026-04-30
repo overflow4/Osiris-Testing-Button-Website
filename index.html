@@ -906,6 +906,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     document.getElementById('inBizType').selectedIndex = 0;
   }
 
+  // Close modal on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('open')) {
+      closeModal();
+    }
+  });
+
   function saveBiz() {
     const name = document.getElementById('inBizName').value.trim();
     if (!name) return;
