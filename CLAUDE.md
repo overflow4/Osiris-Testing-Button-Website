@@ -23,6 +23,18 @@ Env vars must be set on the **`jaspergrenager-langs-projects`** Vercel dashboard
 - `GMAIL_APP_PASSWORD`
 - `BROWSERBASE_API_KEY` (for browser-based invoice and portal testing)
 - `BROWSERBASE_PROJECT_ID` (Browserbase project ID)
+- `SUPABASE_SERVICE_KEY` (service-role JWT used by the crew-job seeder to insert customer/job/cleaner_assignment rows so the Crew App test has a job to click into)
+
+### Local setup for the crew-job seeder
+
+The seeder reads `SUPABASE_SERVICE_KEY` from `process.env`. Before running the local browser server, export the key in the same shell:
+
+```
+export SUPABASE_SERVICE_KEY=<service-role JWT — same value as SUPABASE_KEY in local-browser-server.js>
+node local-browser-server.js
+```
+
+If unset, the Crew App test will still log in successfully but the seed step will report a clear "SUPABASE_SERVICE_KEY env var not set" detail and the 7 job-detail checks will skip with no card to click.
 
 If env vars need updating, tell the user to update them in the Vercel dashboard under the `jaspergrenager-langs-projects` team.
 
