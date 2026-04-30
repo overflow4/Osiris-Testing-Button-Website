@@ -2171,13 +2171,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
         const sequentialPromise = (async () => {
           const v = await testVoice(biz);
           if (stopRequested) return { voice: v };
-          await resetTestData();
+          await resetTestData({ keepQuotes: true });
           const s = await testSms(biz);
           if (stopRequested) return { voice: v, sms: s };
-          await resetTestData();
+          await resetTestData({ keepQuotes: true });
           const w = await testWebForm(biz);
           if (stopRequested) return { voice: v, sms: s, web: w };
-          await resetTestData();
+          await resetTestData({ keepQuotes: true });
           const e = await testEmail(biz);
           return { voice: v, sms: s, web: w, email: e };
         })();
