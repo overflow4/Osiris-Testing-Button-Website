@@ -1399,6 +1399,9 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     addBubble('tEmail', `Hi, I'm interested in getting a cleaning quote.\n\nName: Alex Thompson\nPhone: (424) 677-1145\nAddress: 742 Evergreen Terrace, Naperville, IL 60540\nService: ${serviceDesc}\nPreferred time: Saturday at 10am\n\nFound you through Google search. Thanks!`, true, ts());
 
     try {
+      // Capture send time so subsequent inbox checks ignore anything that
+      // arrived before this email went out (prevents cross-test leakage).
+      const emailSentTime = new Date().toISOString();
       const res = await fetch('/api/proxy-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1421,50 +1424,91 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       document.getElementById('mEmailStatus').textContent = 'Sent';
       addSys('tEmail', `Email sent via ${data.provider}`, 'sys-ok');
 
-      // Wait for processing, then check for follow-up SMS with invoice
-      let postEmailSms = false;
-      let smsContent = '';
-      if (biz.sms) {
-        addPhase('tEmail','Post-Email SMS Check');
-        addSys('tEmail','Waiting for follow-up SMS with invoice link...');
-        const smsNum = normalizePhone(biz.sms);
-        for (let poll = 0; poll < 6; poll++) {
-          await sleep(10000);
-          const md = await twilioGetMessages(smsNum, null, 10);
-          const recentMsgs = (md.messages||[]).filter(m => m.direction === 'inbound' && new Date(m.dateCreated) > new Date(Date.now() - 120000));
-          if (recentMsgs.length > 0) {
-            postEmailSms = true;
-            addPhase('tEmail','Follow-up SMS');
-            recentMsgs.reverse().forEach(m => {
-              const txt = m.body || '';
-              smsContent += txt + ' ';
-              addBubble('tEmail', txt, false, new Date(m.dateSent).toLocaleTimeString('en-US',{hour12:false}));
-            });
-            break;
-          }
+      // ── Phase 1: Look for an EMAIL reply (the correct response channel) ──
+      // The system should reply via EMAIL to an email inquiry. We poll the
+      // test sender's Gmail inbox via /api/gmail-inbox, filtered by the
+      // emailSentTime captured above so we don't pick up unrelated messages.
+      let emailReplyReceived = false;
+      let emailReplyContent = '';
+      addPhase('tEmail', 'Post-Email Reply Check');
+      addSys('tEmail', 'Waiting for email reply from business...');
+      let fromFilter = '';
+      try { fromFilter = '@' + biz.email.split('@')[1]; } catch (e) {}
+      for (let poll = 0; poll < 6; poll++) {
+        await sleep(10000);
+        let inboxResp;
+        try {
+          const r = await fetch('/api/gmail-inbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ since: emailSentTime, from: fromFilter, limit: 5 }),
+          });
+          inboxResp = await r.json();
+        } catch (e) { inboxResp = { error: e.message }; }
+        if (inboxResp?.error) {
+          addSys('tEmail', `Inbox check failed: ${inboxResp.error}`, 'sys-warn');
+          break;
         }
-        if (!postEmailSms) addSys('tEmail','No follow-up SMS received after email.','sys-warn');
-      } else {
-        addSys('tEmail','No SMS number configured — skipping SMS check.','sys-warn');
+        const replies = inboxResp.messages || [];
+        if (replies.length > 0) {
+          emailReplyReceived = true;
+          addPhase('tEmail', 'Email Reply');
+          replies.forEach(m => {
+            const t = new Date(m.date).toLocaleTimeString('en-US', { hour12: false });
+            addBubble('tEmail', `From: ${m.from}\nSubject: ${m.subject}\n\n${m.bodyPreview || '(no text body)'}`, false, t);
+            emailReplyContent += `${m.subject || ''}\n${m.bodyPreview || ''}\n`;
+          });
+          break;
+        }
+      }
+      if (!emailReplyReceived) {
+        addSys('tEmail', 'No email reply received from the business after 60s. The business should reply via email to email inquiries.', 'sys-err');
       }
 
-      // Build conversation context
-      const conversationLog = `## Email Sent\nTo: ${biz.email}\nSubject: Cleaning Inquiry - Alex Thompson\n${emailBody}\n\n## Follow-up SMS\n${smsContent || 'None received'}`;
+      // ── Phase 2 (informational): note SMS leak from prior tests ──
+      // Only count messages received AFTER emailSentTime — without this filter
+      // we'd pick up the SMS reply from the website-form test that fired
+      // seconds before this one.
+      let smsLeakDetected = false;
+      let smsContent = '';
+      if (biz.sms) {
+        const smsNum = normalizePhone(biz.sms);
+        const md = await twilioGetMessages(smsNum, null, 10);
+        const sinceMs = new Date(emailSentTime).getTime();
+        const postSendSms = (md.messages || []).filter(m => m.direction === 'inbound' && new Date(m.dateCreated).getTime() > sinceMs);
+        if (postSendSms.length > 0) {
+          smsLeakDetected = true;
+          addPhase('tEmail', 'SMS reply detected (wrong channel for email lead)');
+          postSendSms.reverse().forEach(m => {
+            const t = new Date(m.dateSent).toLocaleTimeString('en-US', { hour12: false });
+            addBubble('tEmail', `(SMS — wrong channel) ${m.body || ''}`, false, t);
+            smsContent += (m.body || '') + ' ';
+          });
+          addSys('tEmail', 'WARNING: business replied via SMS instead of email.', 'sys-warn');
+        }
+      }
 
-      // Invoice inspection
-      const invoice = await inspectInvoice(smsContent, conversationLog, 'email', biz.name, 'tEmail');
+      // Build context — primary signal is the email reply, but also include
+      // any SMS leak so the AI invoice inspector can still surface URL/price
+      // issues even when the reply channel is wrong.
+      const conversationLog = `## Email Sent\nTo: ${biz.email}\nSubject: ${emailSubject}\n${emailBody}\n\n## Email Reply\n${emailReplyContent || 'None received'}\n\n## SMS Leak (wrong channel)\n${smsContent || 'None'}`;
+      const invoice = await inspectInvoice(`${emailReplyContent} ${smsContent}`, conversationLog, 'email', biz.name, 'tEmail');
 
-      const checks=[
-        {t:'Email sent successfully',s:true},
-        {t:'Follow-up SMS received',s:postEmailSms},
-        {t:'Invoice/quote URL found',s:invoice.found},
-        {t:'Invoice passed AI inspection',s:invoice.analysis?.passed===true},
+      const checks = [
+        { t: 'Email sent successfully', s: true },
+        { t: 'Email reply received (correct channel)', s: emailReplyReceived },
+        { t: 'Invoice/quote URL found', s: invoice.found },
+        { t: 'Invoice passed AI inspection', s: invoice.analysis?.passed === true },
       ];
-      showChecks('chkEmail',checks);
-      const p=checks.filter(c=>c.s).length;
-      document.getElementById('mEmailDb').textContent=invoice.analysis?.score||'--';
-      setBadge('badgeEmail',p>=3?'pass':'fail',`${p}/${checks.length}`);
-      return p>=3?'PASS':'FAIL';
+      if (smsLeakDetected) {
+        checks.push({ t: 'No SMS leak (email lead replied via email, not SMS)', s: !smsLeakDetected });
+      }
+      showChecks('chkEmail', checks);
+      const p = checks.filter(c => c.s).length;
+      document.getElementById('mEmailDb').textContent = invoice.analysis?.score || '--';
+      const threshold = Math.ceil(checks.length * 0.7);
+      setBadge('badgeEmail', p >= threshold ? 'pass' : 'fail', `${p}/${checks.length}`);
+      return p >= threshold ? 'PASS' : 'FAIL';
     } catch(e) {
       if(e.message==='__STOPPED__')throw e;
       addSys('tEmail','Error: '+e.message,'sys-err');

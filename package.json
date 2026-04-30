@@ -21,6 +21,7 @@
   "homepage": "https://github.com/overflow4/Osiris-Testing-Button-Website#readme",
   "dependencies": {
     "@browserbasehq/sdk": "^2.10.0",
+    "imapflow": "^1.3.3",
     "nodemailer": "^8.0.5",
     "playwright-core": "^1.59.1"
   },
