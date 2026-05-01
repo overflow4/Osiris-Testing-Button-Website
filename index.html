@@ -2358,20 +2358,25 @@ Focus only on the failures — do not comment on passing tests. Be specific with
     //   Voice=PASS
     //   SMS=PASS
     //   ...
+    const emo = (v) => {
+      if (v === 'PASS') return '🟢';
+      if (v === 'FAIL' || v === 'ERROR') return '🔴';
+      return '⚪';
+    };
     const formatBiz = (r) => {
       const lines = [
-        `Voice=${r.voice}`,
-        `SMS=${r.sms}`,
-        `Web=${r.web}`,
-        `Email=${r.email}`,
-        `Invoice=${r.invoiceBrowser || 'N/A'}`,
-        `Portal=${r.portal || 'N/A'}`,
-        `Dash=${r.dashboard || 'N/A'}`,
-        `Public=${r.publicPages || 'N/A'}`,
-        `Crew=${r.crewPortal || 'N/A'}`,
-        `Customer=${r.customerPages || 'N/A'}`,
-        `Interactive=${r.interactive || 'N/A'}`,
-        `API=${r.apiHealth || 'N/A'}`,
+        `Voice ${emo(r.voice)}`,
+        `SMS ${emo(r.sms)}`,
+        `Web ${emo(r.web)}`,
+        `Email ${emo(r.email)}`,
+        `Invoice ${emo(r.invoiceBrowser)}`,
+        `Portal ${emo(r.portal)}`,
+        `Dash ${emo(r.dashboard)}`,
+        `Public ${emo(r.publicPages)}`,
+        `Crew ${emo(r.crewPortal)}`,
+        `Customer ${emo(r.customerPages)}`,
+        `Interactive ${emo(r.interactive)}`,
+        `API ${emo(r.apiHealth)}`,
       ];
       return `${r.name}:\n${lines.join('\n')}`;
     };
