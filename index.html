@@ -1304,11 +1304,20 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       });
       if (browserData.preSubmitShot) addScreenshot('shotsWeb', browserData.preSubmitShot, 'Wizard before submit');
       if (browserData.postSubmitShot) addScreenshot('shotsWeb', browserData.postSubmitShot, 'After submit');
-      const status = browserData.webhookCall ? 200 : 0;
+      const wh = browserData.webhookCall;
+      const respStatus = wh?.responseStatus;
+      const ok2xx = respStatus >= 200 && respStatus < 300;
+      const status = respStatus || (wh ? 0 : 0);
       document.getElementById('mWebStatus').textContent = status || 'ERR';
-      if (browserData.webhookCall) {
-        addSys('tWeb','Webhook POST: '+browserData.webhookCall.url,'sys-ok');
-        if (browserData.webhookCall.body) addSys('tWeb','Payload: '+browserData.webhookCall.body.slice(0,300));
+      if (wh) {
+        addSys('tWeb','Webhook POST: '+wh.url, ok2xx?'sys-ok':'sys-warn');
+        if (wh.body) addSys('tWeb','Payload: '+wh.body.slice(0,300));
+        if (respStatus != null) {
+          addSys('tWeb',`Response: HTTP ${respStatus}`, ok2xx?'sys-ok':'sys-err');
+          if (wh.responseBody) addSys('tWeb','Response body: '+wh.responseBody.slice(0,300));
+        } else {
+          addSys('tWeb','Response: (no response captured within timeout)','sys-warn');
+        }
       } else {
         addSys('tWeb','No webhook POST detected within 12s of submit','sys-err');
       }
