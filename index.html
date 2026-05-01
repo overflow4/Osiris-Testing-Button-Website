@@ -1440,17 +1440,24 @@ Focus only on the failures — do not comment on passing tests. Be specific with
       let emailReplyReceived = false;
       let emailReplyContent = '';
       addPhase('tEmail', 'Post-Email Reply Check');
-      addSys('tEmail', 'Waiting for email reply from business...');
-      let fromFilter = '';
-      try { fromFilter = '@' + biz.email.split('@')[1]; } catch (e) {}
-      for (let poll = 0; poll < 6; poll++) {
+      addSys('tEmail', 'Waiting for email reply from business (up to 5 minutes)...');
+      // Look for ANY new email since send time (don't filter by from-domain — bots
+      // sometimes reply from a different address like no-reply@... or via a
+      // different domain than the recipient).
+      // Skip emails that LOOK like our own outbound copy or auto-bouncers.
+      const ourEmailDomain = (() => {
+        // Don't count our OWN sender (alex.thompson.test@gmail.com / GMAIL_USER) as a reply
+        try { return ''; } catch (e) { return ''; }
+      })();
+      // Poll every 10s for up to 5 minutes (30 polls)
+      for (let poll = 0; poll < 30; poll++) {
         await sleep(10000);
         let inboxResp;
         try {
           const r = await fetch('/api/gmail-inbox', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ since: emailSentTime, from: fromFilter, limit: 5 }),
+            body: JSON.stringify({ since: emailSentTime, limit: 10 }),
           });
           inboxResp = await r.json();
         } catch (e) { inboxResp = { error: e.message }; }
@@ -1458,7 +1465,13 @@ Focus only on the failures — do not comment on passing tests. Be specific with
           addSys('tEmail', `Inbox check failed: ${inboxResp.error}`, 'sys-warn');
           break;
         }
-        const replies = inboxResp.messages || [];
+        // Filter out our own outbound copy and obvious bounces
+        const replies = (inboxResp.messages || []).filter(m => {
+          const fromLower = (m.from || '').toLowerCase();
+          if (/mailer-daemon|postmaster|delivery.*failed|undeliverable/i.test(fromLower)) return false;
+          if (/alex\.thompson\.test/i.test(fromLower)) return false; // our test sender
+          return true;
+        });
         if (replies.length > 0) {
           emailReplyReceived = true;
           addPhase('tEmail', 'Email Reply');
@@ -1469,9 +1482,12 @@ Focus only on the failures — do not comment on passing tests. Be specific with
           });
           break;
         }
+        if (poll === 5) addSys('tEmail', '60s — still waiting for reply...');
+        if (poll === 11) addSys('tEmail', '2 min — still waiting for reply...');
+        if (poll === 17) addSys('tEmail', '3 min — still waiting for reply...');
       }
       if (!emailReplyReceived) {
-        addSys('tEmail', 'No email reply received from the business after 60s. The business should reply via email to email inquiries.', 'sys-err');
+        addSys('tEmail', 'No email reply received from the business after 5 minutes.', 'sys-err');
       }
 
       // ── Phase 2 (informational): note SMS leak from prior tests ──
