@@ -27,7 +27,11 @@ function loadFreshLibHandler(handlerName) {
   if (!handlerRel) return null;
   // Purge anything under ./lib so handler + helpers reload together.
   for (const key of Object.keys(require.cache)) {
-    if (key.includes('/lib/browser-')) delete require.cache[key];
+    // Purge anything under ./lib/ — not just browser-* — so helpers like
+    // seed-crew-job.js also reload on every request. Without this,
+    // newly-added exports in non-browser-prefixed lib files come back as
+    // "is not a function" because the cached old module is still served.
+    if (key.includes('/lib/')) delete require.cache[key];
   }
   return require(handlerRel);
 }
